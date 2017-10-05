@@ -195,3 +195,9 @@ Xbim.Geometry.Engine[0-9]*.dll
 /Xbim.Presentation/x86
 */ClickOnce/
 SharedFileVersionInfo.cs
+
+# Localization strings
+*.de.resx
+*.de.Designer.cs
+*.ru.resx
+*.ru.Designer.cs
