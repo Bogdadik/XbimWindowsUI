@@ -46,11 +46,11 @@ namespace Xbim.Presentation.ModelGeomInfo
         {
             if (_geomPoints.Count == 1)
                 return
-                    $"Selected point coords: {_geomPoints[0].Point.X:0.##}, {_geomPoints[0].Point.Y:0.##}, {_geomPoints[0].Point.Z:0.##})";
+                    $"{RegisterManager.L("SelectedPointCoords")}: ({_geomPoints[0].Point.X:0.##}, {_geomPoints[0].Point.Y:0.##}, {_geomPoints[0].Point.Z:0.##})";
             var d = GetArea();
             return !double.IsNaN(d) 
-                ? $"Lenght: {GetLenght():0.##}m Area: {d:0.##}sqm"
-                : $"Lenght: {GetLenght():0.##}m";
+                ? $"{RegisterManager.L("Length")}: {GetLenght():0.##} {RegisterManager.L("Meter")}, {RegisterManager.L("Area")}: {d:0.##} {RegisterManager.L("SquareMeter")}"
+                : $"{RegisterManager.L("Length")}: {GetLenght():0.##} {RegisterManager.L("Meter")}";
         }
 
         public PolylineGeomInfo()

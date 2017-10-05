@@ -307,7 +307,6 @@ namespace Xbim.Presentation
 
         protected virtual void DrawingControl3D_Loaded(object sender, RoutedEventArgs e)
         {
-            
         }
 
         #region Fields
@@ -817,7 +816,7 @@ namespace Xbim.Presentation
         /// Executed when a new entity is selected
         /// </summary>
         /// <param name="newVal"></param>
-        protected virtual void HighlighSelected(IPersistEntity newVal)
+        public virtual void HighlighSelected(IPersistEntity newVal)
         {
             // 0. prepare
             var mat = new WpfMaterial();
@@ -1438,7 +1437,7 @@ namespace Xbim.Presentation
 
         public void ZoomSelected()
         {
-            if (SelectedEntity == null || Highlighted.Content == null || Highlighted.Content.Bounds.IsEmpty)
+            if (Highlighted.Content == null || Highlighted.Content.Bounds.IsEmpty)
                 return;
             var r3D = Highlighted.Content.Bounds;
             ZoomTo(r3D);

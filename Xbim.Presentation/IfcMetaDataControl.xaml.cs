@@ -625,43 +625,41 @@ namespace Xbim.Presentation
                 ReportProp(_entity, inverse, false);
             }
 
-            
-
             var root = _entity as IIfcRoot;
             if (root == null)
                 return;            
-            _objectProperties.Add(new PropertyItem {Name = "Name", Value = root.Name, PropertySetName = "OldUI"});
-            _objectProperties.Add(new PropertyItem { Name = "Description", Value = root.Description, PropertySetName = "OldUI" });
-            _objectProperties.Add(new PropertyItem { Name = "GUID", Value = root.GlobalId, PropertySetName = "OldUI" });
-            if (root.OwnerHistory != null)
-            {
-                _objectProperties.Add(new PropertyItem
-                {
-                    Name = "Ownership",
-                    Value =
-                        root.OwnerHistory.OwningUser + " using " +
-                        root.OwnerHistory.OwningApplication.ApplicationIdentifier,
-                    PropertySetName = "OldUI"
-                });
-            }
+            //_objectProperties.Add(new PropertyItem {Name = "Name", Value = root.Name, PropertySetName = "OldUI"});
+            //_objectProperties.Add(new PropertyItem { Name = "Description", Value = root.Description, PropertySetName = "OldUI" });
+            //_objectProperties.Add(new PropertyItem { Name = "GUID", Value = root.GlobalId, PropertySetName = "OldUI" });
+            //if (root.OwnerHistory != null)
+            //{
+            //    _objectProperties.Add(new PropertyItem
+            //    {
+            //        Name = "Ownership",
+            //        Value =
+            //            root.OwnerHistory.OwningUser + " using " +
+            //            root.OwnerHistory.OwningApplication.ApplicationIdentifier,
+            //        PropertySetName = "OldUI"
+            //    });
+            //}
 
             //now do properties in further specialisations that are text labels
-            foreach (var pInfo in ifcType.Properties.Where
-                (p => p.Value.EntityAttribute.Order > 4
-                      && p.Value.EntityAttribute.State != EntityAttributeState.DerivedOverride)
-                ) //skip the first for of root, and derived and things that are objects
-            {
-                var val = pInfo.Value.PropertyInfo.GetValue(_entity, null);
-                if (val == null || !(val is ExpressType))
-                    continue;
-                var pi = new PropertyItem
-                {
-                    Name = pInfo.Value.PropertyInfo.Name,
-                    Value = ((ExpressType) val).ToString(),
-                    PropertySetName = "OldUI"
-                };
-                _objectProperties.Add(pi);
-            }
+            //foreach (var pInfo in ifcType.Properties.Where
+            //    (p => p.Value.EntityAttribute.Order > 4
+            //          && p.Value.EntityAttribute.State != EntityAttributeState.DerivedOverride)
+            //    ) //skip the first for of root, and derived and things that are objects
+            //{
+            //    var val = pInfo.Value.PropertyInfo.GetValue(_entity, null);
+            //    if (val == null || !(val is ExpressType))
+            //        continue;
+            //    var pi = new PropertyItem
+            //    {
+            //        Name = pInfo.Value.PropertyInfo.Name,
+            //        Value = ((ExpressType) val).ToString(),
+            //        PropertySetName = "OldUI"
+            //    };
+            //    _objectProperties.Add(pi);
+            //}
         }
 
         public IfcStore Model

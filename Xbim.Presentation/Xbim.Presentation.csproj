@@ -65,6 +65,27 @@
     <DocumentationFile>..\Output\Release\Xbim.Presentation.XML</DocumentationFile>
     <NoWarn>1591;1572;1573;1574</NoWarn>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>..\Output\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <DocumentationFile>..\Output\Release\Xbim.Presentation.XML</DocumentationFile>
+    <Optimize>true</Optimize>
+    <NoWarn>1591;1572;1573;1574</NoWarn>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x64</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="Esent.Interop, Version=1.9.4.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\ManagedEsent.1.9.4\lib\net40\Esent.Interop.dll</HintPath>
@@ -209,7 +230,23 @@
     <Compile Include="LayerStyling\LayerStylingExtensions.cs" />
     <Compile Include="LayerStyling\SurfaceLayerStyler.cs" />
     <Compile Include="Rect3DExtensions.cs" />
+    <Compile Include="RegisterManager.cs" />
     <Compile Include="WpfExtensions.cs" />
+    <Compile Include="XbimPresentation.de.Designer.cs">
+      <DependentUpon>XbimPresentation.de.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="XbimPresentation.ru.Designer.cs">
+      <DependentUpon>XbimPresentation.ru.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="XbimPresentation.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>XbimPresentation.resx</DependentUpon>
+    </Compile>
     <Compile Include="XbimIPersistEntityCollection.cs" />
     <Compile Include="XbimMatrix3DExtensions.cs" />
     <Compile Include="MeshGeometry3DExtensions.cs" />
@@ -276,6 +313,29 @@
     </None>
     <None Include="XbimIfcKey.pfx" />
     <None Include="XbimOpenSourceKeyFile.snk" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="XbimPresentation.de.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>XbimPresentation.de.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="XbimPresentation.ru.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>XbimPresentation.ru.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="XbimPresentation.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>XbimPresentation.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Xbim.LocalizationHelper\Xbim.LocalizationHelper.csproj">
+      <Project>{c1e3fa68-f6da-4c88-9e1d-156fb2ae768b}</Project>
+      <Name>Xbim.LocalizationHelper</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
