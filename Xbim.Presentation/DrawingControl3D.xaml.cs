@@ -76,6 +76,8 @@ namespace Xbim.Presentation
 
         #endregion
 
+        public bool AltProcess { get; set; }
+
         protected HashSet<Material> Materials { get; } = new HashSet<Material>();
 
         protected Dictionary<Material, double> Opacities { get; } = new Dictionary<Material, double>();
