@@ -471,6 +471,8 @@ namespace Xbim.Presentation
                 var mc = XbimMouseClickActions.Single;
                 if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
                     mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
+                if (AltProcess)
+                    mc = XbimMouseClickActions.Measure;
                 if (mc != XbimMouseClickActions.Measure && !UserModeledDimension.IsEmpty)
                 {
                     // drop the geometry that holds the visualization of the measure
