@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Documents;
@@ -13,6 +14,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Navigation;
+using Squirrel;
 using Xbim.Common;
 using Xbim.Common.Enumerations;
 using Xbim.Common.Geometry;
@@ -94,7 +96,7 @@ namespace XbimXplorer.Commands
             e.Handled = true;
         }
 
-        private void Execute()
+        private async Task Execute()
         {
 #if DEBUG
             // stores the commands being launched
@@ -132,7 +134,7 @@ namespace XbimXplorer.Commands
                     DisplayHelp();
                     continue;
                 }
-
+                
                 mdbclosed = Regex.Match(cmd, @"^Plugin Refresh$", RegexOptions.IgnoreCase);
                 if (mdbclosed.Success)
                 {
@@ -196,7 +198,7 @@ namespace XbimXplorer.Commands
                     }
                     continue;
                 }
-
+                
                 mdbclosed = Regex.Match(cmd, @"clear *\b(?<mode>(on|off))*", RegexOptions.IgnoreCase);
                 if (mdbclosed.Success)
                 {
@@ -739,6 +741,7 @@ namespace XbimXplorer.Commands
                     continue;
                 }
 
+
                 m = Regex.Match(cmd, @"^ModelFix$", RegexOptions.IgnoreCase);
                 if (m.Success)
                 {
@@ -1070,7 +1073,7 @@ namespace XbimXplorer.Commands
             }
             catch (Exception)
             {
-                ReportAdd($"Error opening source file. Ignored.", Brushes.Red);;
+                ReportAdd($"Error opening source file. Ignored.", Brushes.Red);
             }
             if (model == null)
             {

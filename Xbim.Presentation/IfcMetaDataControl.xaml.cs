@@ -152,7 +152,6 @@ namespace Xbim.Presentation
         public ObservableCollection<PropertyItem> Properties
         {
             get { return _properties; }
-
         }
 
         private readonly ObservableCollection<PropertyItem> _materials = new ObservableCollection<PropertyItem>();
@@ -317,44 +316,45 @@ namespace Xbim.Presentation
             if (quantity == null)
                 return "";
             string value = null;
+            var unitName = "";
             var u = quantity.Unit;
-            if (u == null)
-                return "";
-            var unit = u.FullName;
+            if (quantity.Unit != null)
+                unitName = quantity.Unit.FullName;
+            
             var length = quantity as IIfcQuantityLength;
             if (length != null)
             {
                 value = length.LengthValue.ToString();
                 if (quantity.Unit == null)
-                    unit = GetUnit(modelUnits, IfcUnitEnum.LENGTHUNIT);
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.LENGTHUNIT);
             }
             var area = quantity as IIfcQuantityArea;
             if (area != null)
             {
                 value = area.AreaValue.ToString();
                 if (quantity.Unit == null)
-                    unit = GetUnit(modelUnits, IfcUnitEnum.AREAUNIT);
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.AREAUNIT);
             }
             var weight = quantity as IIfcQuantityWeight;
             if (weight != null)
             {
                 value = weight.WeightValue.ToString();
                 if (quantity.Unit == null)
-                    unit = GetUnit(modelUnits, IfcUnitEnum.MASSUNIT);
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.MASSUNIT);
             }
             var time = quantity as IIfcQuantityTime;
             if (time != null)
             {
                 value = time.TimeValue.ToString();
                 if (quantity.Unit == null)
-                    unit = GetUnit(modelUnits, IfcUnitEnum.TIMEUNIT);
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.TIMEUNIT);
             }
             var volume = quantity as IIfcQuantityVolume;
             if (volume != null)
             {
                 value = volume.VolumeValue.ToString();
                 if (quantity.Unit == null)
-                    unit = GetUnit(modelUnits, IfcUnitEnum.VOLUMEUNIT);
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.VOLUMEUNIT);
             }
             var count = quantity as IIfcQuantityCount;
             if (count != null)
@@ -364,9 +364,9 @@ namespace Xbim.Presentation
             if (string.IsNullOrWhiteSpace(value))
                 return "";
 
-            return string.IsNullOrWhiteSpace(unit) ? 
+            return string.IsNullOrWhiteSpace(unitName) ? 
                 value :
-                $"{value} {unit}";
+                $"{value} {unitName}";
         }
 
         private static string GetUnit(IIfcUnitAssignment units, IfcUnitEnum type)
@@ -418,6 +418,28 @@ namespace Xbim.Presentation
                 {
                     AddProperty(composingProperty, pSet.Name + " / " + item.Name);
                 }
+            }
+            foreach (var item in pSet.HasProperties.OfType<IIfcPropertyEnumeratedValue>()) // handle IfcComplexProperty
+            {
+                AddProperty(item, pSet.Name);
+            }
+        }
+
+        private void AddProperty(IIfcPropertyEnumeratedValue item, string groupName)
+        {
+            var val = "";
+            var nomVals = item.EnumerationValues;
+            foreach (var nomVal in nomVals)
+            {
+                if (nomVal != null)
+                    val = nomVal.ToString();
+                _properties.Add(new PropertyItem
+                {
+                    IfcLabel = item.EntityLabel,
+                    PropertySetName = groupName,
+                    Name = item.Name,
+                    Value = val
+                });
             }
         }
 
@@ -518,12 +540,11 @@ namespace Xbim.Presentation
             
             if (prop.EntityAttribute.IsEnumerable)
             {
-                var propCollection = propVal as IEnumerable<object>;
-                
+                var propCollection = propVal as System.Collections.IEnumerable;
+
                 if (propCollection != null)
                 {
-                    var propVals = propCollection.ToArray();
-
+                    var propVals = propCollection.Cast<object>().ToArray();
                     switch (propVals.Length)
                     {
                         case 0:
@@ -633,12 +654,19 @@ namespace Xbim.Presentation
             //_objectProperties.Add(new PropertyItem { Name = "GUID", Value = root.GlobalId, PropertySetName = "OldUI" });
             //if (root.OwnerHistory != null)
             //{
+            //    var user = root.OwnerHistory.OwningUser?.ToString() ?? "<null>";
+
+            //    var app  = ( root.OwnerHistory.OwningApplication != null
+            //        && root.OwnerHistory.OwningApplication.ApplicationIdentifier != null
+            //        && !string.IsNullOrEmpty(root.OwnerHistory.OwningApplication.ApplicationIdentifier) ) 
+            //        ? root.OwnerHistory.OwningApplication.ApplicationIdentifier.ToString()
+            //        : "<null>";
+
+
             //    _objectProperties.Add(new PropertyItem
             //    {
             //        Name = "Ownership",
-            //        Value =
-            //            root.OwnerHistory.OwningUser + " using " +
-            //            root.OwnerHistory.OwningApplication.ApplicationIdentifier,
+            //        Value = user + " using " + app,
             //        PropertySetName = "OldUI"
             //    });
             //}
@@ -694,6 +722,8 @@ namespace Xbim.Presentation
             _properties.Clear();
             _typeProperties.Clear();
             _materials.Clear();
+            _history.Clear();
+            
             NotifyPropertyChanged("Properties");
             NotifyPropertyChanged("PropertySets");
         }

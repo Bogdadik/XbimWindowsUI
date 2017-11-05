@@ -4,9 +4,11 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
+using Squirrel;
 using Xbim.Common;
 using Xbim.Ifc;
 using Xbim.Ifc4.GeometricModelResource;
@@ -45,14 +47,38 @@ namespace XbimXplorer.Dialogs
         {
             get { return string.Format("Assembly Version: {0}", _assembly.GetName().Version); }
         }
+
         public string FileVersion
         {
             get
             {
-                var fvi = FileVersionInfo.GetVersionInfo(_assembly.Location);
-                return string.Format("File Version: {0}", fvi.FileVersion);
+                if (string.IsNullOrEmpty(_assembly.Location))
+                    return "File version: n/a";
+                var xa = new XbimAssemblyInfo(_assembly);
+                return string.Format("File Version: {0} compiled on {1}", xa.FileVersion, xa.CompilationTime);
             }
         }
+
+        public string SquirrelVersion
+        {
+            get
+            {
+                if (!App.IsSquirrelInstall)
+                    return "";
+                try
+                {
+                    using (var mgr = new UpdateManager("http://www.overarching.it/dload/XbimXplorer"))
+                    {
+                        return "Squirrel version: " + mgr.CurrentlyInstalledVersion();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return ex.Message;
+                }
+            }
+        }
+
 
         public string AssembliesInfo
         {
@@ -144,6 +170,21 @@ namespace XbimXplorer.Dialogs
         public IfcStore Model { get; set; }
         public List<Assembly> Assemblies { get; set; }
 
+        public bool UpdateAvailable
+        {
+            set
+            {
+                UpdateTab.Visibility = value
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+                if (value)
+                {
+                    Dispatcher.BeginInvoke((Action)(() => Tabs.SelectedItem = UpdateTab));
+                }
+            }
+        }
+
         private void UserControl_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
         {
             DragMove();
@@ -161,6 +202,11 @@ namespace XbimXplorer.Dialogs
             {
                 AssembliesText.Text = AssembliesInfo;
             }
+        }
+
+        private void Restart(object sender, System.Windows.RoutedEventArgs e)
+        {
+            UpdateManager.RestartApp();
         }
     }
 }
