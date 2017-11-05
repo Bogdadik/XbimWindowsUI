@@ -74,6 +74,8 @@ namespace Xbim.Presentation
 
         public ModelVisual3D TransparentsVisual3D => Transparents;
 
+        public ObservableMeshVisual3D HighlightedVisual => Highlighted;
+
         #endregion
 
         public bool AltProcess { get; set; }
@@ -112,6 +114,8 @@ namespace Xbim.Presentation
                 Canvas.MouseDown += Canvas_MouseDown;
                 Canvas.MouseMove += Canvas_MouseMove;
                 Canvas.MouseWheel += Canvas_MouseWheel;
+                // Canvas.ShowFrameRate = true;
+                var p = RenderOptions.GetEdgeMode((DependencyObject)Canvas);
             }
             Loaded += DrawingControl3D_Loaded;
 
@@ -131,6 +135,33 @@ namespace Xbim.Presentation
             var pInfo = typeof (MeshVisual3D).GetProperty(e.PropertyName);
             var sourceValue = pInfo.GetValue(Highlighted, null);
             pInfo.SetValue(TransHighlighted, sourceValue, null);
+        }
+
+        public bool ShowFps
+        {
+            get { return Canvas.ShowFrameRate; }
+            set { Canvas.ShowFrameRate = value; }
+        }
+
+        public bool HighSpeed
+        {
+            get
+            {
+                return Canvas.ClipToBounds == false;
+            }
+            set
+            {
+                if (value == true)
+                {
+                    Canvas.ClipToBounds = false;
+                    RenderOptions.SetEdgeMode((DependencyObject)Canvas, EdgeMode.Aliased);
+                }
+                else
+                {
+                    Canvas.ClipToBounds = true;
+                    RenderOptions.SetEdgeMode((DependencyObject)Canvas, EdgeMode.Unspecified);
+                }
+            }
         }
         
         protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -195,11 +226,7 @@ namespace Xbim.Presentation
             ClipHandler = null;
         }
 
-        /// <summary>
-        /// The list of types that the engine will not consider in the generation of the scene, the exclusion code needs to be correctly implemented in the 
-        /// configued ILayerStyler for the exclusion to work.
-        /// </summary>
-        public List<Type> ExcludedTypes = new List<Type>()
+        public static List<Type> DefaultExcludedTypes = new List<Type>()
         {
             typeof(Ifc2x3.ProductExtension.IfcSpace),
             typeof(Ifc4.ProductExtension.IfcSpace),
@@ -207,6 +234,12 @@ namespace Xbim.Presentation
             typeof(Ifc4.ProductExtension.IfcFeatureElement)
         };
 
+        /// <summary>
+        /// The list of types that the engine will not consider in the generation of the scene, the exclusion code needs to be correctly implemented in the 
+        /// configued ILayerStyler for the exclusion to work.
+        /// </summary>
+        public List<Type> ExcludedTypes = new List<Type>(DefaultExcludedTypes);
+        
         private LinesVisual3D _userModeledDimLines;
         private PointsVisual3D _userModeledDimPoints;
         public PolylineGeomInfo UserModeledDimension = new PolylineGeomInfo();
@@ -315,9 +348,20 @@ namespace Xbim.Presentation
 
         public List<XbimScene<WpfMeshGeometry3D, WpfMaterial>> Scenes =
             new List<XbimScene<WpfMeshGeometry3D, WpfMaterial>>();
+        
+        /// <summary>
+        /// Represent the extents of what is considered model. This depends on the selected region.
+        /// _viewBounds is transformed depending on ModelBounds and _modelTranslation. 
+        /// </summary>
+        private XbimRect3D _viewBounds
+        {
+            get
+            {
+                return ModelPositions.ViewSpaceBounds;
+            }
+        }
 
-        public XbimRect3D ModelBounds;
-        private XbimRect3D _viewBounds;
+       
 
         /// <summary>
         /// Gets or sets the model.
@@ -537,7 +581,6 @@ namespace Xbim.Presentation
 
         protected virtual void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
         {
-            
         }
         
         private PointGeomInfo GetClosestPoint(RayMeshGeometry3DHitTestResult hit)
@@ -760,7 +803,7 @@ namespace Xbim.Presentation
             {
                 SelectionDrivenSelectedEntityChange(newVal.FirstOrDefault());
             }
-            HighlighSelected(null);
+            // HighlighSelected(null);
         }
 
         public static readonly RoutedEvent SelectedEntityChangedEvent =
@@ -823,36 +866,26 @@ namespace Xbim.Presentation
         public virtual void HighlighSelected(IPersistEntity newVal)
         {
             // 0. prepare
-            var mat = new WpfMaterial();
-            mat.CreateMaterial(new XbimColour(
-                "Selection", SelectionColor.ScR, SelectionColor.ScG, SelectionColor.ScB, SelectionColor.ScA)
+            var mat = new WpfMaterial(
+                new XbimColour(
+                    "Selection", SelectionColor.ScR, SelectionColor.ScG, SelectionColor.ScB, SelectionColor.ScA)
                 );
 
             // 1. get the geometry first
-            WpfMeshGeometry3D m;
-            if (SelectionBehaviour == SelectionBehaviours.MultipleSelection)
-            {
-                m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);               
-            }
-            else if (newVal != null) // single element selection, requires the newval to get the model
-            {
-                m = WpfMeshGeometry3D.GetGeometry(newVal, ModelPositions[newVal.Model].Transform, mat);
-            }
-            else // otherwise we create an empty mesh
-            {
-                m = new WpfMeshGeometry3D();
-            }
-
+            //
+            var m = GetSelectionGeometry(newVal, mat);
             // 2. then determine how to highlight it
             //
             if (SelectionHighlightMode == SelectionHighlightModes.WholeMesh)
             {
                 // Highlighted is defined in the XAML of drawingcontrol3d
+                //
                 Highlighted.Content = m;
             }
             else if (SelectionHighlightMode == SelectionHighlightModes.Normals)
             {
                 // prepares the normals to faces (or points)
+                //
                 var axesMeshBuilder = new MeshBuilder();
                 var pos = m.Positions.ToArray();
                 var nor = m.Normals.ToArray();
@@ -921,6 +954,43 @@ namespace Xbim.Presentation
                 }
                 Highlighted.Content = new GeometryModel3D(axesMeshBuilder.ToMesh(), HelixToolkit.Wpf.Materials.Yellow);
             }
+        }
+
+        private WpfMeshGeometry3D GetSelectionGeometry(IPersistEntity newVal, WpfMaterial mat)
+        {
+            WpfMeshGeometry3D m;
+            if (newVal is IIfcShapeRepresentation)
+            {
+                m = WpfMeshGeometry3D.GetGeometry((IIfcShapeRepresentation) newVal, ModelPositions, mat);
+            }
+            if (newVal is IIfcRelVoidsElement)
+            {
+                var vd = newVal as IIfcRelVoidsElement;
+                var rep = vd.RelatedOpeningElement.Representation.Representations.OfType<IIfcShapeRepresentation>()
+                    .FirstOrDefault();
+                if (rep != null)
+                    m = WpfMeshGeometry3D.GetGeometry((IIfcShapeRepresentation) rep, ModelPositions, mat);
+                else
+                {
+                    m = new WpfMeshGeometry3D();
+                }
+            }
+            else
+            {
+                if (SelectionBehaviour == SelectionBehaviours.MultipleSelection)
+                {
+                    m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);
+                }
+                else if (newVal != null) // single element selection, requires the newval to get the model
+                {
+                    m = WpfMeshGeometry3D.GetGeometry(newVal, ModelPositions[newVal.Model].Transform, mat);
+                }
+                else // otherwise we create an empty mesh
+                {
+                    m = new WpfMeshGeometry3D();
+                }
+            }
+            return m;
         }
 
         public ComponentSelectionMode ComponentSelectionDisplay = ComponentSelectionMode.All;
@@ -1069,7 +1139,7 @@ namespace Xbim.Presentation
 
         // public XbimVector3D ModelTranslation;
         // public XbimMatrix3D WcsTransform;
-        private XbimVector3D _modelTranslation;
+        // private XbimVector3D _modelTranslation;
 
         private void ClearGraphics(ModelRefreshOptions options = ModelRefreshOptions.None)
         {
@@ -1083,18 +1153,18 @@ namespace Xbim.Presentation
             Transparents.Children.Clear();
             Extras.Children.Clear();
 
-            if ((options & ModelRefreshOptions.ViewPreserveSelection) != ModelRefreshOptions.ViewPreserveSelection)
+            if (!options.HasFlag(ModelRefreshOptions.ViewPreserveSelection))
             {
                 Selection = new EntitySelection();
                 Highlighted.Content = null;
             }
 
-            if ((options & ModelRefreshOptions.ViewPreserveCuttingPlane) != ModelRefreshOptions.ViewPreserveCuttingPlane)
+            if (!options.HasFlag(ModelRefreshOptions.ViewPreserveCuttingPlane))
                 ClearCutPlane();
-            ModelPositions = new XbimModelPositioningCollection();
-            ModelBounds = XbimRect3D.Empty;
-            _modelTranslation = new XbimVector3D(0, 0, 0);
 
+            if (!options.HasFlag(ModelRefreshOptions.ViewPreserveSelectedRegion))
+                ModelPositions = new XbimModelPositioningCollection();
+           
             Scenes = new List<XbimScene<WpfMeshGeometry3D, WpfMaterial>>();
             //if ((options & ModelRefreshOptions.ViewPreserveCameraPosition) != ModelRefreshOptions.ViewPreserveCameraPosition)
             //    Viewport.ResetCamera();
@@ -1107,10 +1177,11 @@ namespace Xbim.Presentation
             ViewPreserveCameraPosition = 1,
             ViewPreserveSelection = 2,
             ViewPreserveCuttingPlane = 4,
-            ViewPreserveAll = 7
+            ViewPreserveSelectedRegion = 4,
+            ViewPreserveAll = ~None
         }
 
-        public XbimModelPositioningCollection ModelPositions;
+        public XbimModelPositioningCollection ModelPositions = new XbimModelPositioningCollection();
 
         public ILayerStyler DefaultLayerStyler { get; set; }
 
@@ -1149,14 +1220,14 @@ namespace Xbim.Presentation
         /// <param name="model"></param>
         /// <param name="entityLabels">If null loads the whole model, otherwise only elements listed in the enumerable</param>
         /// <param name="options"></param>
-        public void LoadGeometry(IfcStore model, IEnumerable<int> entityLabels = null,
-            ModelRefreshOptions options = ModelRefreshOptions.None)
+        public void LoadGeometry(IfcStore model, IEnumerable<int> entityLabels = null, ModelRefreshOptions options = ModelRefreshOptions.None)
         {
             // AddLayerToDrawingControl is the function that actually populates the geometry in the viewer.
             // AddLayerToDrawingControl is triggered by BuildRefModelScene and BuildScene below here when layers get ready.
 
-            //reset all the visuals
-            ClearGraphics(options);
+            // reset all the visuals
+            // - ModelPositions is emptied in here
+            ClearGraphics(options); 
 
             if (model == null)
             {
@@ -1164,30 +1235,39 @@ namespace Xbim.Presentation
                 return; //nothing to show
             }
             _hasModelGrid = model.Instances.OfType<IIfcGrid>().Any();
-            // set a progressive userDefinedId
+            
+            // ensure a unique userDefinedId
             short userDefinedId = 0;
             model.UserDefinedId = userDefinedId;
-
-            // model scaling is determined on all federated models
-            ModelPositions.AddModel(model.ReferencingModel); //add in the model that holds the main entities
-
-            //now add in any referenced models
-            
             if (model.IsFederation)
             {
                 foreach (var refModel in model.ReferencedModels)
                 {
-                    refModel.Model.UserDefinedId = ++userDefinedId;
-                    var v = refModel.Model as IfcStore;
-                    if (v!= null)
-                        ModelPositions.AddModel(v.ReferencingModel);
+                    refModel.Model.UserDefinedId = ++userDefinedId;   
                 }
-               // fedModel.ReferencedModels.CollectionChanged += ReferencedModels_CollectionChanged;
+                // todo: model federation needs to be enabled back
+                // fedModel.ReferencedModels.CollectionChanged += ReferencedModels_CollectionChanged;
             }
-            ModelBounds = ModelPositions.GetEnvelopeInMeters();
-            DefineModelTranslation();
-            ModelPositions.SetCenterInMeters(_modelTranslation);
+            
+            // model positioning routine
+            if (!options.HasFlag(ModelRefreshOptions.ViewPreserveSelectedRegion))
+            {
+                // model scaling is determined on all federated models
+                ModelPositions.AddModel(model.ReferencingModel); //add in the model that holds the main entities
+                //now add in any referenced models
+                if (model.IsFederation)
+                {
+                    foreach (var refModel in model.ReferencedModels)
+                    {
 
+                        var v = refModel.Model as IfcStore;
+                        if (v != null)
+                            ModelPositions.AddModel(v.ReferencingModel); //add in the referenced models
+                    }
+                }
+            }
+            ModelPositions.ComputeViewBoundsTransform();
+            
             if (DefaultLayerStyler == null)
                 DefaultLayerStyler = new SurfaceLayerStyler();
 
@@ -1195,12 +1275,11 @@ namespace Xbim.Presentation
             // loading the main model
             DefaultLayerStyler.SetFederationEnvironment(null);
             var scene = DefaultLayerStyler.BuildScene(model.ReferencingModel,ModelPositions[model.ReferencingModel].Transform, Opaques, Transparents, ExcludedTypes);
-            
-            if (scene != null)
+            if (scene != null && scene.Layers.Any())
             {
-                if (scene.Layers.Any())
-                    Scenes.Add(scene);
+                Scenes.Add(scene);
             }
+            
             if (model.IsFederation)
             {
                 // loading all referenced models.
@@ -1211,13 +1290,7 @@ namespace Xbim.Presentation
             }
             RecalculateView(options);
         }
-
-        private void DefineModelTranslation()
-        {
-            var p = ModelBounds.Centroid();
-            _modelTranslation = new XbimVector3D(-p.X, -p.Y, -p.Z);
-        }
-
+        
         private void LoadReferencedModel(IReferencedModel refModel)
         {
             if (refModel.Model == null)
@@ -1228,31 +1301,27 @@ namespace Xbim.Presentation
             if (mod == null)
                 return;
             var pos = ModelPositions[mod.ReferencingModel].Transform;
-            Scenes.Add(
-                DefaultLayerStyler.BuildScene(
-                    refModel.Model, 
-                    pos, 
+            var scene = DefaultLayerStyler.BuildScene(
+                    refModel.Model,
+                    pos,
                     Opaques,
-                    Transparents, 
-                    ExcludedTypes)
-                );
-
+                    Transparents,
+                    ExcludedTypes);
+            if (scene != null && scene.Layers.Any())
+            {
+                Scenes.Add(scene);
+            }           
         }
 
         private void RecalculateView(ModelRefreshOptions options = ModelRefreshOptions.None)
-        {
-            _viewBounds = ModelBounds.IsEmpty
-                ? new XbimRect3D(0, 0, 0, 10, 10, 5)
-                : ModelBounds.Transform(XbimMatrix3D.CreateTranslation(_modelTranslation));
-            
+        {            
             // Assumes a NearPlaneDistance of 1/8 of meter.
-            //all models are now in metres
+            // all models are now in metres
             UpdatefrustumPlanes(Canvas, null);
             UpdateGrid();
 
-            //make sure whole scene is visible
-            if ((options & ModelRefreshOptions.ViewPreserveCameraPosition) !=
-                ModelRefreshOptions.ViewPreserveCameraPosition)
+            // make sure whole scene is visible, if ViewPreserveCameraPosition is not specified
+            if (!options.HasFlag(ModelRefreshOptions.ViewPreserveCameraPosition))
                 ViewHome();
         }
 
@@ -1288,7 +1357,6 @@ namespace Xbim.Presentation
 
         public void ReportData(StringBuilder sb, IModel model, int entityLabel)
         {
-
             if (model == null)
                 return;
             foreach (var scene in Scenes)
@@ -1425,7 +1493,8 @@ namespace Xbim.Presentation
         }
 
         /// <summary>
-        /// This fuction is fired when the reset of the camer is invoked.
+        /// Zooms to the full scale of the model.
+        /// This fuction is fired when the reset of the camera is invoked.
         /// It is called from RecalculateView if the parameters of RecalculateView don't exclude it.
         /// It is also called from the WindowsUI Xplorer menu.
         /// </summary>
@@ -1446,8 +1515,7 @@ namespace Xbim.Presentation
             var r3D = Highlighted.Content.Bounds;
             ZoomTo(r3D);
         }
-
-
+        
         /// <summary>
         /// This functions sets a cutting plane at a distance of delta over the base of the selected element.
         /// It is useful when the selected element is obscured by elements surrounding it.
@@ -1479,8 +1547,10 @@ namespace Xbim.Presentation
                 _viewBounds.X, _viewBounds.Y, _viewBounds.Z,
                 _viewBounds.SizeX, _viewBounds.SizeY, _viewBounds.SizeZ
                 );
+
             if (doubleRectSize)
             {
+                // move the corner and double the size.
                 r3D.Offset(-r3D.SizeX/2, -r3D.SizeY/2, -r3D.SizeZ/2);
                 r3D.SizeX *= 2;
                 r3D.SizeY *= 2;
@@ -1488,8 +1558,10 @@ namespace Xbim.Presentation
             }
             if (r3D.IsEmpty)
                 return;
-            // if bigger than bounds zoom bounds
-            Viewport.ZoomExtents(r3D.Contains(bounds) ? bounds : r3D, 200);
+            // if the zoom area is bigger than bounds, zoom to bounds instead
+            var actualZoomBounds = r3D.Contains(bounds) ? bounds : r3D;
+            // Viewport is helix component
+            Viewport.ZoomExtents(actualZoomBounds, 200);
         }
 
         public void ZoomTo(XbimRect3D r3D)
@@ -1581,7 +1653,7 @@ namespace Xbim.Presentation
             container.Arrange(new Rect(container.DesiredSize));
 
             // Temporarily add a PresentationSource if none exists
-// ReSharper disable once UnusedVariable
+            // ReSharper disable once UnusedVariable
             using (
                 var temporaryPresentationSource = new HwndSource(new HwndSourceParameters())
                 {
@@ -1613,6 +1685,17 @@ namespace Xbim.Presentation
                     aEncoder.Save(stm);
                 }
             }
+        }
+        /// <summary>
+        /// Sets the reguion to be displayed to the relevant area.
+        /// </summary>
+        /// <param name="rName"></param>
+        /// <returns>true if the region has ben found and set, false otherwise</returns>
+        public bool SetRegion(string rName, bool add)
+        {
+            var ret = ModelPositions.SetSelectedRegionByName(rName, add);
+            ReloadModel(ModelRefreshOptions.ViewPreserveSelectedRegion);
+            return ret;
         }
     }
 }

@@ -60,7 +60,7 @@
     <Window.CommandBindings>
         <CommandBinding Command="Open"   Executed="CommandBinding_Open" CanExecute="CommandBinding_CanExecute"/>
         <CommandBinding Command="Refresh" Executed="CommandBinding_Refresh"  CanExecute="CanExecuteIfFileOpen"/>
-        <CommandBinding Command="SaveAs" Executed="CommandBinding_SaveAs"  CanExecute="CanExecuteIfFileOpen"/>
+        <CommandBinding Command="SaveAs" Executed="CommandBinding_SaveAs"  CanExecute="CanExecuteIfModelNotNull"/>
         <CommandBinding Command="Close"  Executed="CommandBinding_Close" CanExecute="CanExecuteIfFileOpen"/>
         
         <CommandBinding Command="{x:Static local:XplorerMainWindow.EditFederationCmd}" Executed="EditFederationCmdExecuted" CanExecute="EditFederationCmdCanExecute"/>
@@ -98,19 +98,27 @@
                 <MenuItem Header="_Style">
                     <MenuItem Header="_Styler Reset" Click="SetDefaultModeStyler" />
                     <MenuItem Header="Styler _Configuration" Click="ConfigureStyler" />
+                    <MenuItem Header="IfcSpaces only" Click="StylerIfcSpacesOnly" />
+                    <MenuItem Header="Display bounding corners" Click="SetStylerBoundCorners" />
                 </MenuItem>
                 <MenuItem Header="Selection view _mode">
                     <MenuItem x:Name="WholeMesh" Header="Whole mesh" Click="SelectionMode" IsChecked="True" />
                     <MenuItem x:Name="Normals" Header="Normals" Click="SelectionMode" />
                     <MenuItem x:Name="WireFrame" Header="WireFrame" Click="SelectionMode" />
                 </MenuItem>
-
-                <MenuItem Header="_Zoom Extents" Click="MenuItem_ZoomExtents"/>
+                <MenuItem Header="_Zoom">
+                    <MenuItem Header="Zoom _Extents" Click="MenuItem_ZoomExtents"/>
+                    <MenuItem Header="Zoom _Selected" Click="MenuItem_ZoomSelected"/>
+                </MenuItem>
                 <MenuItem IsCheckable="True" Header="Show Gridlines" IsChecked="{Binding ShowGridLines, ElementName=DrawingControl}"/>
                 <MenuItem Header="_Copy image" Command="Copy"/>
                 <Separator Visibility="{Binding DeveloperVisible, ElementName=MainWindow}" />
                 <MenuItem x:Name="DeveloperMenu" Header="_Developer windows" Visibility="{Binding DeveloperVisible, ElementName=MainWindow}" >
-                    <MenuItem Header="IFC stripping" Click="OpenStrippingWindow"/>
+                    <MenuItem Header="IFC stripping" Click="OpenStrippingWindow">
+                        <MenuItem.Icon>
+                            <Image Width="20" Source="Simplify\Funnel.png"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="_Settings" Click="DisplaySettingsPage" />
@@ -207,7 +215,7 @@
                 </avalonDock:LayoutPanel>
             </avalonDock:LayoutRoot>
         </avalonDock:DockingManager>
-        
+
         <StatusBar Grid.Row="2" Height="23"  Name="StatusBar" VerticalAlignment="Top" >
             <StatusBarItem>
                 <TextBlock Name="ProjectName"></TextBlock>
@@ -244,6 +252,5 @@
                 </Grid>
             </StatusBarItem>
         </StatusBar>
-
     </Grid>
 </Window>
