@@ -202,3 +202,9 @@ DuplicateCodeReport.xml
 *.de.Designer.cs
 *.ru.resx
 *.ru.Designer.cs
+*.de-DE.resx
+*.de-DE.Designer.cs
+*.ru-RU.resx
+*.ru-RU.Designer.cs
+*.en-US.resx
+*.en-US.Designer.cs

@@ -216,13 +216,18 @@
     <Compile Include="Rect3DExtensions.cs" />
     <Compile Include="RegisterManager.cs" />
     <Compile Include="WpfExtensions.cs" />
-    <Compile Include="XbimPresentation.de.Designer.cs">
-      <DependentUpon>XbimPresentation.de.resx</DependentUpon>
+    <Compile Include="XbimPresentation.en-US.Designer.cs">
+      <DependentUpon>XbimPresentation.en-US.resx</DependentUpon>
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
     </Compile>
-    <Compile Include="XbimPresentation.ru.Designer.cs">
-      <DependentUpon>XbimPresentation.ru.resx</DependentUpon>
+    <Compile Include="XbimPresentation.de-DE.Designer.cs">
+      <DependentUpon>XbimPresentation.de-DE.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="XbimPresentation.ru-RU.Designer.cs">
+      <DependentUpon>XbimPresentation.ru-RU.resx</DependentUpon>
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
     </Compile>
@@ -300,14 +305,19 @@
     <None Include="XbimOpenSourceKeyFile.snk" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="XbimPresentation.de.resx">
+    <EmbeddedResource Include="XbimPresentation.en-US.resx">
       <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>XbimPresentation.de.Designer.cs</LastGenOutput>
+      <LastGenOutput>XbimPresentation.en-US.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
-    <EmbeddedResource Include="XbimPresentation.ru.resx">
+    <EmbeddedResource Include="XbimPresentation.de-DE.resx">
       <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>XbimPresentation.ru.Designer.cs</LastGenOutput>
+      <LastGenOutput>XbimPresentation.de-DE.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="XbimPresentation.ru-RU.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>XbimPresentation.ru-RU.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
     </EmbeddedResource>
     <EmbeddedResource Include="XbimPresentation.resx">
