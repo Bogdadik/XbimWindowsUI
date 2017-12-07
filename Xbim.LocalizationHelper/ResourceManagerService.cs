@@ -29,6 +29,11 @@ namespace Xbim.LocalizationHelper
         /// </summary>
         public static CultureInfo CurrentLocale { get; private set; }
 
+        /// <summary>
+        /// Предыдущая культура приложения
+        /// </summary>
+        public static CultureInfo PreviousLocale { get; private set; }
+
         static ResourceManagerService()
         {
             _managers = new Dictionary<string, ResourceManager>();
@@ -43,14 +48,16 @@ namespace Xbim.LocalizationHelper
         /// <param name="managerName">Имя ResourceManager</param>
         /// <param name="resourceKey">Имя ресурса для поиска</param>
         /// <returns></returns>
-        public static string GetResourceString(string managerName, string resourceKey)
+        public static string GetResourceString(string managerName, string resourceKey, CultureInfo locale = null)
         {
+            if (locale == null)
+                locale = CurrentLocale;
             ResourceManager manager = null;
             string resource = String.Empty;
 
             if (_managers.TryGetValue(managerName, out manager))
             {
-                resource = manager.GetString(resourceKey);
+                resource = manager.GetString(resourceKey, locale);
             }
             return resource;
         }
@@ -61,10 +68,11 @@ namespace Xbim.LocalizationHelper
         /// <param name="newLocaleName">Имя культуры (en-US, en-GB)</param>
         public static void ChangeLocale(string newLocaleName)
         {
+            
             CultureInfo newCultureInfo = new CultureInfo(newLocaleName);
             Thread.CurrentThread.CurrentCulture = newCultureInfo;
             Thread.CurrentThread.CurrentUICulture = newCultureInfo;
-
+            PreviousLocale = CurrentLocale;
             CurrentLocale = newCultureInfo;
 
             RaiseLocaleChanged(newCultureInfo);
