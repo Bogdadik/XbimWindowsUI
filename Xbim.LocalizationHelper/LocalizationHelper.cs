@@ -55,8 +55,8 @@ namespace Xbim.LocalizationHelper
                 {
                     return "[res]";
                 }
-
-                return ResourceManagerService.GetResourceString(GetManagerKey(key), GetResourceKey(key));
+                var value = ResourceManagerService.GetResourceString(GetManagerKey(key), GetResourceKey(key));
+                return string.IsNullOrWhiteSpace(value) ? GetResourceKey(key) : value;
             }
         }
 
