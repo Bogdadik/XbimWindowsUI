@@ -366,7 +366,7 @@ namespace Xbim.Presentation
 
             return string.IsNullOrWhiteSpace(unitName) ? 
                 value :
-                $"{value} {unitName}";
+                $"{value} {RegisterManager.L(unitName)}";
         }
 
         private static string GetUnit(IIfcUnitAssignment units, IfcUnitEnum type)
