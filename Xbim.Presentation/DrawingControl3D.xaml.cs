@@ -584,7 +584,7 @@ namespace Xbim.Presentation
 
         protected virtual void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            ViewportMouseMoveEvent.Invoke(Viewport.CursorPosition);
+            ViewportMouseMoveEvent?.Invoke(Viewport.CursorPosition);
         }
 
         protected virtual void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
