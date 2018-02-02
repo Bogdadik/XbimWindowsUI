@@ -125,6 +125,8 @@ namespace Xbim.Presentation
             MouseModifierKeyBehaviour.Add(ModifierKeys.Control, XbimMouseClickActions.Toggle);
             MouseModifierKeyBehaviour.Add(ModifierKeys.Alt, XbimMouseClickActions.Measure);
             MouseModifierKeyBehaviour.Add(ModifierKeys.Shift, XbimMouseClickActions.SetClip);
+
+            Viewport.CalculateCursorPosition = true;
         }
 
         /// <summary>
@@ -445,6 +447,11 @@ namespace Xbim.Presentation
 
         public delegate void UserModeledDimensionChanged(DrawingControl3D m, PolylineGeomInfo e);
 
+
+        public event ViewportMouseMove ViewportMouseMoveEvent;
+
+        public delegate void ViewportMouseMove(Point3D? e);
+
         protected virtual void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(Canvas);
@@ -577,6 +584,7 @@ namespace Xbim.Presentation
 
         protected virtual void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
+            ViewportMouseMoveEvent.Invoke(Viewport.CursorPosition);
         }
 
         protected virtual void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
