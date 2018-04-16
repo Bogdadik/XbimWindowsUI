@@ -29,6 +29,7 @@ using Xbim.ModelGeometry.Scene;
 using Xbim.Presentation.Extensions;
 using Xbim.Presentation.LayerStyling;
 using Xbim.Presentation.ModelGeomInfo;
+using System.Diagnostics;
 
 #endregion
 
@@ -456,7 +457,7 @@ namespace Xbim.Presentation
         {
             var pos = e.GetPosition(Canvas);
             var hit = FindHit(pos);            
-
+            
             var hitObject = hit?.ModelHit?.GetValue(TagProperty);           
             if (hitObject == null)
             {
@@ -565,15 +566,22 @@ namespace Xbim.Presentation
                                 Entity = GetClickedEntity(hit),
                                 Point = hit.PointHit
                             };
-                            var pClosest = GetClosestTriangleHotPoint(hit, 50);
-                            var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosest.Point.DistanceTo(hit.PointHit);
-                            if (scale > 50)
+                            var pClosest = GetClosestTriangleHotPoint(hit, pos, 20);
+                            double actualDist = 0;
+                            try
+                            {
+                                actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosest.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+                            }
+                            catch (Exception) { }
+                            //var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosest.Point.DistanceTo(hit.PointHit);
+                            if (actualDist < 20)
                                 pHit = pClosest;
                             if (UserModeledDimension.Last3DPoint.HasValue &&
                                 UserModeledDimension.Last3DPoint.Value == pHit.Point)
                                 UserModeledDimension.RemoveLast();
                             else
                                 UserModeledDimension.Add(pHit);
+
                             FirePrevPointsChanged();
                             break;
                         case XbimMouseClickActions.SetClip:
@@ -589,10 +597,84 @@ namespace Xbim.Presentation
                 SelectedEntity = thisSelectedEntity;
             }
         }
+        private Point Point3DToScreen2D(Point3D p3d)
+        {
+            bool TransformationResultOK;
+            Viewport3DVisual vp3Dv = VisualTreeHelper.GetParent(Viewport.Viewport.Children[0]) as Viewport3DVisual;
+            //Viewport.Viewport.TransformToAncestor();
+            Matrix3D m = _3DTools.MathUtils.TryWorldToViewportTransform(vp3Dv, out TransformationResultOK);
+            if (!TransformationResultOK)
+                throw new Exception();
+            Point3D pb = m.Transform(p3d);
+            Point p2d = new Point(pb.X, pb.Y);
+            return p2d;
+        }
+
+        private PointGeomInfo GetHotHitPoint(Point position, int angle = 30, double vartexPixelDistance = 20, double edgesPixelDistance = 20, double outerPixelDistance = 10, double outerPixelStep = 1)
+        {
+            var hit = FindHit(position, angle, outerPixelDistance, outerPixelStep);
+            if (hit == null)
+                return null;
+            var pHot = new PointGeomInfo
+            {
+                Entity = GetClickedEntity(hit),
+                Point = hit.PointHit
+            };
+            var pClosestHot = GetClosestTriangleHotPoint(hit, position, vartexPixelDistance);
+            double actualDist = 0;
+            try
+            {
+                actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosestHot.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+            }
+            catch (Exception) { }
+            //var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosest.Point.DistanceTo(hit.PointHit);
+                var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosestHot.Point.DistanceTo(hit.PointHit);
+            //проверить уровень привязки к ребрам, еслы высок, то берем ту точку, в которую попали.
+            if (actualDist < edgesPixelDistance)
+                pHot = pClosestHot;
+            return pHot;
+        }
+
+        private PointsVisual3D _currentPoint;
 
         protected virtual void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            ViewportMouseMoveEvent?.Invoke(Viewport.CursorPosition);
+            //check measure state
+            var mc = XbimMouseClickActions.Single;
+            if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
+                mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
+            if (AltProcess)
+                mc = XbimMouseClickActions.Measure;
+            if (mc.Equals(XbimMouseClickActions.Measure))
+            {
+                //get hot Point when on element or near
+                Canvas.Children.Remove(_currentPoint);
+                _currentPoint = null;
+                var pHot = GetHotHitPoint(e.GetPosition(Canvas), 30, 20, 20);
+                if (pHot != null)
+                {
+                    //draw hot point
+                    _currentPoint = new PointsVisual3D
+                    {
+                        Color = Colors.Red,
+                        Size = 5,
+                        DepthOffset = 0.001
+                    };
+                    _currentPoint.Points = new Point3DCollection(new Point3D[] { pHot.Point });
+                    Canvas.Children.Add(_currentPoint);
+                }
+            }
+            else
+            {
+                Canvas.Children.Remove(_currentPoint);
+                _currentPoint = null;
+            }
+
+
+            if (Viewport.CursorOnElementPosition != null)
+                ViewportMouseMoveEvent?.Invoke(Viewport.CursorOnElementPosition);
+            else
+                ViewportMouseMoveEvent?.Invoke(Viewport.CursorPosition);
         }
 
         protected virtual void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -642,8 +724,10 @@ namespace Xbim.Presentation
         /// <param name="hit">hit mesh</param>
         /// <param name="scalefactor">radius of search; 0 - nearest triangle point, max - nearest vertext point, line segments ignored</param>
         /// <returns></returns>
-        private PointGeomInfo GetClosestTriangleHotPoint(RayMeshGeometry3DHitTestResult hit, double scalefactor = 50)
+        private PointGeomInfo GetClosestTriangleHotPoint(RayMeshGeometry3DHitTestResult hit, Point pos2d, double pixelDistance = 20)
         {
+            if (hit?.PointHit == null || hit?.MeshHit == null)
+                throw new ArgumentNullException();
             MathNet.Spatial.Euclidean.Point3D pointHit = MediaPointToEuclidean(hit.PointHit);
 
             var pts = new[]
@@ -667,8 +751,18 @@ namespace Xbim.Presentation
                 euclideanResult = pts[i];
 
             }
-            var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / minDist;
-            if (scale > scalefactor)
+
+            double actualDist = 0 ;
+            try
+            {
+                var new2dPos = Point3DToScreen2D(EuclideanPointToMedia(euclideanResult));
+                actualDist = MediaPointToEuclidean(new2dPos).DistanceTo(MediaPointToEuclidean(pos2d));
+            }
+            catch (Exception) { }
+            
+
+         //   var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / minDist;
+            if (actualDist < pixelDistance)
                 return new PointGeomInfo
                 {
                     Entity = GetClickedEntity(hit),
@@ -696,6 +790,11 @@ namespace Xbim.Presentation
         private MathNet.Spatial.Euclidean.Point3D MediaPointToEuclidean(Point3D mediaPoint)
         {
             return new MathNet.Spatial.Euclidean.Point3D(mediaPoint.X, mediaPoint.Y, mediaPoint.Z);
+        }
+
+        private MathNet.Spatial.Euclidean.Point2D MediaPointToEuclidean(Point mediaPoint)
+        {
+            return new MathNet.Spatial.Euclidean.Point2D(mediaPoint.X, mediaPoint.Y);
         }
 
         private Point3D EuclideanPointToMedia(MathNet.Spatial.Euclidean.Point3D euclideanPoint)
@@ -1177,8 +1276,11 @@ namespace Xbim.Presentation
             axesMeshBuilder.AddTube(path, lineThickness, 9, false);
         }
 
-        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position)
+        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position, int angleStep = 15, double pixelDistance = 10, double pixelStep = 1)
         {
+            if (angleStep <= 0 || angleStep > 90)
+                throw new ArgumentOutOfRangeException();
+
             RayMeshGeometry3DHitTestResult result = null;
             HitTestFilterCallback hitFilterCallback = oFilter =>
             {
@@ -1207,15 +1309,31 @@ namespace Xbim.Presentation
             if (result != null)
                 return result;
 
-            for (int i = 1; i <= 10; i++)
+
+            bool continueCheck = false;
+            //check max distance fist - to optimize
+            for (int angle = 0; angle < 360; angle += angleStep)
             {
-                for (int angle = 0; angle < 360; angle += 30)
+                Point checkedPosition = new Point(position.X + (pixelDistance * Math.Cos(angle)),
+                                                  position.Y + (pixelDistance * Math.Sin(angle)));
+                hitParams = new PointHitTestParameters(checkedPosition);
+                VisualTreeHelper.HitTest(Viewport.Viewport, hitFilterCallback, hitTestCallback, hitParams);
+                if (result != null)
+                    continueCheck = true;
+            }
+            if (!continueCheck)
+                return null;
+            //else
+
+            for (double i = 1; i < pixelDistance; i+= pixelStep)
+            {
+                for (int angle = 0; angle < 360; angle += angleStep)
                 {
                     Point checkedPosition = new Point(position.X + (i * Math.Cos(angle)),
                                                       position.Y + (i * Math.Sin(angle)));
                     hitParams = new PointHitTestParameters(checkedPosition);
                     VisualTreeHelper.HitTest(Viewport.Viewport, hitFilterCallback, hitTestCallback, hitParams);
-                    if (result != null)
+                    if (result != null)                    
                         return result;
                 }                    
             }

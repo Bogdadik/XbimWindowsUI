@@ -222,6 +222,7 @@
     <Compile Include="LayerStyling\LayerStylingExtensions.cs" />
     <Compile Include="LayerStyling\BoundingBoxStyler.cs" />
     <Compile Include="LayerStyling\SurfaceLayerStyler.cs" />
+    <Compile Include="MathUtils.cs" />
     <Compile Include="Rect3DExtensions.cs" />
     <Compile Include="RegisterManager.cs" />
     <Compile Include="WpfExtensions.cs" />
