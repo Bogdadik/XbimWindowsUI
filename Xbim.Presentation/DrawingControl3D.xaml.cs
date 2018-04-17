@@ -84,8 +84,11 @@ namespace Xbim.Presentation
         #region Setting Properties
 
         private double _snapRadius;
+        private const int AngleStep = 30;
 
         public bool PointSnap { get; set; }
+
+        public bool MiddlePointSnap { get; set; }
 
         public double SnapRadius
         {
@@ -479,7 +482,7 @@ namespace Xbim.Presentation
         protected virtual void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(Canvas);
-            var hit = FindHit(pos);            
+            var hit = FindHit(pos, AngleStep);
             
             var hitObject = hit?.ModelHit?.GetValue(TagProperty);           
             if (hitObject == null)
@@ -677,7 +680,7 @@ namespace Xbim.Presentation
                 if (mc.Equals(XbimMouseClickActions.Measure))
                 {
                     //get hot Point when on element or near
-                    var pHot = GetHotHitPoint(e.GetPosition(Canvas), 30, SnapRadius, SnapRadius);
+                    var pHot = GetHotHitPoint(e.GetPosition(Canvas), AngleStep, SnapRadius, SnapRadius);
                     if (pHot != null)
                     {
                         //draw hot point
@@ -767,13 +770,39 @@ namespace Xbim.Presentation
 
             for (var i = 0; i < 3; i++)
             {
-                var dist = pointHit.DistanceTo(pts[i]);
+                double dist;
+                if (MiddlePointSnap)
+                {
+                    //check middle point
+                    var MidPoint = MathNet.Spatial.Euclidean.Point3D.MidPoint(pts[i], pts[i + 1]);
+                    dist = pointHit.DistanceTo(MidPoint);
+                    if (!(dist < minDist))
+                        continue;
+                    minDist = dist;
+                    euclideanResult = MidPoint;
+                }
+
+                dist = pointHit.DistanceTo(pts[i]);
                 if (!(dist < minDist))
                     continue;
                 minDist = dist;
                 euclideanResult = pts[i];
-
             }
+
+            //check  UserModeledDimPoints 
+            if (_userModeledDimPoints?.Points != null)
+            {
+                foreach (var pt in _userModeledDimPoints?.Points)
+                {
+                    var ePoint = MediaPointToEuclidean(pt);
+                    var dist = pointHit.DistanceTo(ePoint);
+                    if (!(dist < minDist))
+                        continue;
+                    minDist = dist;
+                    euclideanResult = ePoint;
+                }
+            }
+
 
             double actualDist = 0 ;
             try
@@ -1300,7 +1329,7 @@ namespace Xbim.Presentation
             axesMeshBuilder.AddTube(path, lineThickness, 9, false);
         }
 
-        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position, int angleStep = 15, double pixelDistance = 10, double pixelStep = 1)
+        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position, int angleStep = 30, double pixelDistance = 10, double pixelStep = 1)
         {
             if (angleStep <= 0 || angleStep > 90)
                 throw new ArgumentOutOfRangeException();
