@@ -78,8 +78,31 @@ namespace Xbim.Presentation
         public ObservableMeshVisual3D HighlightedVisual => Highlighted;
 
         #endregion
-
+        
         public bool AltProcess { get; set; }
+
+        #region Setting Properties
+
+        private double _snapRadius;
+
+        public bool PointSnap { get; set; }
+
+        public double SnapRadius
+        {
+            get
+            {
+                return _snapRadius;
+            }
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException();
+                _snapRadius = value;
+            }
+        }
+
+        #endregion
+
 
         protected HashSet<Material> Materials { get; } = new HashSet<Material>();
 
@@ -566,16 +589,20 @@ namespace Xbim.Presentation
                                 Entity = GetClickedEntity(hit),
                                 Point = hit.PointHit
                             };
-                            var pClosest = GetClosestTriangleHotPoint(hit, pos, 20);
-                            double actualDist = 0;
-                            try
+
+                            if (PointSnap)
                             {
-                                actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosest.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+                                var pClosest = GetClosestTriangleHotPoint(hit, pos, SnapRadius);
+                                double actualDist = 0;
+                                try
+                                {
+                                    actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosest.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+                                }
+                                catch (Exception) { }
+                                if (actualDist < SnapRadius)
+                                    pHit = pClosest;
                             }
-                            catch (Exception) { }
-                            //var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosest.Point.DistanceTo(hit.PointHit);
-                            if (actualDist < 20)
-                                pHit = pClosest;
+
                             if (UserModeledDimension.Last3DPoint.HasValue &&
                                 UserModeledDimension.Last3DPoint.Value == pHit.Point)
                                 UserModeledDimension.RemoveLast();
@@ -627,8 +654,6 @@ namespace Xbim.Presentation
                 actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosestHot.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
             }
             catch (Exception) { }
-            //var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosest.Point.DistanceTo(hit.PointHit);
-                var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / pClosestHot.Point.DistanceTo(hit.PointHit);
             //проверить уровень привязки к ребрам, еслы высок, то берем ту точку, в которую попали.
             if (actualDist < edgesPixelDistance)
                 pHot = pClosestHot;
@@ -639,35 +664,33 @@ namespace Xbim.Presentation
 
         protected virtual void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            //check measure state
-            var mc = XbimMouseClickActions.Single;
-            if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
-                mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
-            if (AltProcess)
-                mc = XbimMouseClickActions.Measure;
-            if (mc.Equals(XbimMouseClickActions.Measure))
+            Canvas.Children.Remove(_currentPoint);
+            _currentPoint = null;
+            if (PointSnap)
             {
-                //get hot Point when on element or near
-                Canvas.Children.Remove(_currentPoint);
-                _currentPoint = null;
-                var pHot = GetHotHitPoint(e.GetPosition(Canvas), 30, 20, 20);
-                if (pHot != null)
+                //check measure state
+                var mc = XbimMouseClickActions.Single;
+                if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
+                    mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
+                if (AltProcess)
+                    mc = XbimMouseClickActions.Measure;
+                if (mc.Equals(XbimMouseClickActions.Measure))
                 {
-                    //draw hot point
-                    _currentPoint = new PointsVisual3D
+                    //get hot Point when on element or near
+                    var pHot = GetHotHitPoint(e.GetPosition(Canvas), 30, SnapRadius, SnapRadius);
+                    if (pHot != null)
                     {
-                        Color = Colors.Red,
-                        Size = 5,
-                        DepthOffset = 0.001
-                    };
-                    _currentPoint.Points = new Point3DCollection(new Point3D[] { pHot.Point });
-                    Canvas.Children.Add(_currentPoint);
+                        //draw hot point
+                        _currentPoint = new PointsVisual3D
+                        {
+                            Color = Colors.Red,
+                            Size = 5,
+                            DepthOffset = 0.001
+                        };
+                        _currentPoint.Points = new Point3DCollection(new Point3D[] { pHot.Point });
+                        Canvas.Children.Add(_currentPoint);
+                    }
                 }
-            }
-            else
-            {
-                Canvas.Children.Remove(_currentPoint);
-                _currentPoint = null;
             }
 
 
