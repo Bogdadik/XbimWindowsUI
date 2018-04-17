@@ -641,7 +641,7 @@ namespace Xbim.Presentation
         {
             var hit = FindHit(position, angle, outerPixelDistance, outerPixelStep);
             if (hit == null)
-                return null;
+               return null;
             var pHot = new PointGeomInfo
             {
                 Entity = GetClickedEntity(hit),
@@ -653,7 +653,7 @@ namespace Xbim.Presentation
             {
                 actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosestHot.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
             }
-            catch (Exception) { }
+            catch { }
             //проверить уровень привязки к ребрам, еслы высок, то берем ту точку, в которую попали.
             if (actualDist < edgesPixelDistance)
                 pHot = pClosestHot;
@@ -781,7 +781,8 @@ namespace Xbim.Presentation
                 var new2dPos = Point3DToScreen2D(EuclideanPointToMedia(euclideanResult));
                 actualDist = MediaPointToEuclidean(new2dPos).DistanceTo(MediaPointToEuclidean(pos2d));
             }
-            catch (Exception) { }
+            catch
+            { }
             
 
          //   var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / minDist;
