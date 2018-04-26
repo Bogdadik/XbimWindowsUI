@@ -29,6 +29,7 @@ using Xbim.ModelGeometry.Scene;
 using Xbim.Presentation.Extensions;
 using Xbim.Presentation.LayerStyling;
 using Xbim.Presentation.ModelGeomInfo;
+using System.Diagnostics;
 
 #endregion
 
@@ -77,8 +78,34 @@ namespace Xbim.Presentation
         public ObservableMeshVisual3D HighlightedVisual => Highlighted;
 
         #endregion
-
+        
         public bool AltProcess { get; set; }
+
+        #region Setting Properties
+
+        private double _snapRadius;
+        private const int AngleStep = 30;
+
+        public bool PointSnap { get; set; }
+
+        public bool MiddlePointSnap { get; set; }
+
+        public double SnapRadius
+        {
+            get
+            {
+                return _snapRadius;
+            }
+            set
+            {
+                if (value < 1 || value > 100)
+                    throw new ArgumentOutOfRangeException();
+                _snapRadius = value;
+            }
+        }
+
+        #endregion
+
 
         protected HashSet<Material> Materials { get; } = new HashSet<Material>();
 
@@ -455,8 +482,8 @@ namespace Xbim.Presentation
         protected virtual void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(Canvas);
-            var hit = FindHit(pos);
-
+            var hit = FindHit(pos, AngleStep);
+            
             var hitObject = hit?.ModelHit?.GetValue(TagProperty);           
             if (hitObject == null)
             {
@@ -469,7 +496,7 @@ namespace Xbim.Presentation
                 FirePrevPointsChanged();
                 return;
             }
-            
+
             IPersistEntity thisSelectedEntity = null;
             if (hitObject is XbimInstanceHandle)
             {
@@ -560,12 +587,31 @@ namespace Xbim.Presentation
                             SelectionDrivenSelectedEntityChange(thisSelectedEntity);
                             break;
                         case XbimMouseClickActions.Measure:
-                            var p = GetClosestPoint(hit);
+                            var pHit = new PointGeomInfo
+                            {
+                                Entity = GetClickedEntity(hit),
+                                Point = hit.PointHit
+                            };
+
+                            if (PointSnap)
+                            {
+                                var pClosest = GetClosestTriangleHotPoint(hit, pos, SnapRadius);
+                                double actualDist = 0;
+                                try
+                                {
+                                    actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosest.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+                                }
+                                catch (Exception) { }
+                                if (actualDist < SnapRadius)
+                                    pHit = pClosest;
+                            }
+
                             if (UserModeledDimension.Last3DPoint.HasValue &&
-                                UserModeledDimension.Last3DPoint.Value == p.Point)
+                                UserModeledDimension.Last3DPoint.Value == pHit.Point)
                                 UserModeledDimension.RemoveLast();
                             else
-                                UserModeledDimension.Add(p);
+                                UserModeledDimension.Add(pHit);
+
                             FirePrevPointsChanged();
                             break;
                         case XbimMouseClickActions.SetClip:
@@ -581,10 +627,80 @@ namespace Xbim.Presentation
                 SelectedEntity = thisSelectedEntity;
             }
         }
+        private Point Point3DToScreen2D(Point3D p3d)
+        {
+            bool TransformationResultOK;
+            Viewport3DVisual vp3Dv = VisualTreeHelper.GetParent(Viewport.Viewport.Children[0]) as Viewport3DVisual;
+            //Viewport.Viewport.TransformToAncestor();
+            Matrix3D m = _3DTools.MathUtils.TryWorldToViewportTransform(vp3Dv, out TransformationResultOK);
+            if (!TransformationResultOK)
+                throw new Exception();
+            Point3D pb = m.Transform(p3d);
+            Point p2d = new Point(pb.X, pb.Y);
+            return p2d;
+        }
+
+        private PointGeomInfo GetHotHitPoint(Point position, int angle = 30, double vartexPixelDistance = 20, double edgesPixelDistance = 20, double outerPixelDistance = 10, double outerPixelStep = 1)
+        {
+            var hit = FindHit(position, angle, outerPixelDistance, outerPixelStep);
+            if (hit == null)
+               return null;
+            var pHot = new PointGeomInfo
+            {
+                Entity = GetClickedEntity(hit),
+                Point = hit.PointHit
+            };
+            var pClosestHot = GetClosestTriangleHotPoint(hit, position, vartexPixelDistance);
+            double actualDist = 0;
+            try
+            {
+                actualDist = MediaPointToEuclidean(Point3DToScreen2D(pClosestHot.Point)).DistanceTo(MediaPointToEuclidean(Point3DToScreen2D(hit.PointHit)));
+            }
+            catch { }
+            //проверить уровень привязки к ребрам, еслы высок, то берем ту точку, в которую попали.
+            if (actualDist < edgesPixelDistance)
+                pHot = pClosestHot;
+            return pHot;
+        }
+
+        private PointsVisual3D _currentPoint;
 
         protected virtual void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
-            ViewportMouseMoveEvent?.Invoke(Viewport.CursorPosition);
+            Canvas.Children.Remove(_currentPoint);
+            _currentPoint = null;
+            if (PointSnap)
+            {
+                //check measure state
+                var mc = XbimMouseClickActions.Single;
+                if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
+                    mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
+                if (AltProcess)
+                    mc = XbimMouseClickActions.Measure;
+                if (mc.Equals(XbimMouseClickActions.Measure))
+                {
+                    //get hot Point when on element or near
+                    var pHot = GetHotHitPoint(e.GetPosition(Canvas), AngleStep, SnapRadius, SnapRadius);
+                    if (pHot != null)
+                    {
+                        //draw hot point
+                        _currentPoint = new PointsVisual3D
+                        {
+                            Color = Colors.Red,
+                            Size = 5,
+                            DepthOffset = 0.001
+                        };
+                        _currentPoint.Points = new Point3DCollection(new Point3D[] { pHot.Point });
+                        Canvas.Children.Add(_currentPoint);
+                    }
+                }
+            }
+
+
+            if (Viewport.CursorOnElementPosition != null)
+                ViewportMouseMoveEvent?.Invoke(Viewport.CursorOnElementPosition);
+            else
+                ViewportMouseMoveEvent?.Invoke(Viewport.CursorPosition);
         }
 
         protected virtual void Canvas_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -626,6 +742,117 @@ namespace Xbim.Presentation
             };
 
             return pRet;
+        }
+
+        /// <summary>
+        /// Get the closest Point to hit Triangle
+        /// </summary>
+        /// <param name="hit">hit mesh</param>
+        /// <param name="scalefactor">radius of search; 0 - nearest triangle point, max - nearest vertext point, line segments ignored</param>
+        /// <returns></returns>
+        private PointGeomInfo GetClosestTriangleHotPoint(RayMeshGeometry3DHitTestResult hit, Point pos2d, double pixelDistance = 20)
+        {
+            if (hit?.PointHit == null || hit?.MeshHit == null)
+                throw new ArgumentNullException();
+            MathNet.Spatial.Euclidean.Point3D pointHit = MediaPointToEuclidean(hit.PointHit);
+
+            var pts = new[]
+            {
+                 MediaPointToEuclidean(hit.MeshHit.Positions[hit.VertexIndex1]),
+                 MediaPointToEuclidean(hit.MeshHit.Positions[hit.VertexIndex2]),
+                 MediaPointToEuclidean(hit.MeshHit.Positions[hit.VertexIndex3]),
+                 MediaPointToEuclidean(hit.MeshHit.Positions[hit.VertexIndex1])//for loop
+            };
+
+            var minDist = double.PositiveInfinity;
+            var euclideanResult = pts[0];
+
+
+            for (var i = 0; i < 3; i++)
+            {
+                double dist;
+                if (MiddlePointSnap)
+                {
+                    //check middle point
+                    var MidPoint = MathNet.Spatial.Euclidean.Point3D.MidPoint(pts[i], pts[i + 1]);
+                    dist = pointHit.DistanceTo(MidPoint);
+                    if (!(dist < minDist))
+                        continue;
+                    minDist = dist;
+                    euclideanResult = MidPoint;
+                }
+
+                dist = pointHit.DistanceTo(pts[i]);
+                if (!(dist < minDist))
+                    continue;
+                minDist = dist;
+                euclideanResult = pts[i];
+            }
+
+            //check  UserModeledDimPoints 
+            if (_userModeledDimPoints?.Points != null)
+            {
+                foreach (var pt in _userModeledDimPoints?.Points)
+                {
+                    var ePoint = MediaPointToEuclidean(pt);
+                    var dist = pointHit.DistanceTo(ePoint);
+                    if (!(dist < minDist))
+                        continue;
+                    minDist = dist;
+                    euclideanResult = ePoint;
+                }
+            }
+
+
+            double actualDist = 0 ;
+            try
+            {
+                var new2dPos = Point3DToScreen2D(EuclideanPointToMedia(euclideanResult));
+                actualDist = MediaPointToEuclidean(new2dPos).DistanceTo(MediaPointToEuclidean(pos2d));
+            }
+            catch
+            { }
+            
+
+         //   var scale = Viewport.Camera.Position.DistanceTo(hit.PointHit) / minDist;
+            if (actualDist < pixelDistance)
+                return new PointGeomInfo
+                {
+                    Entity = GetClickedEntity(hit),
+                    Point = EuclideanPointToMedia(euclideanResult)
+                };
+            //else check point on line segment 
+            for (var i = 0; i < 3; i++)
+            {
+                MathNet.Spatial.Euclidean.Line3D line = new MathNet.Spatial.Euclidean.Line3D(pts[i], pts[i + 1]);
+                var nearestSegmentPoint = line.ClosestPointTo(pointHit, true);
+
+                var dist = pointHit.DistanceTo(nearestSegmentPoint);
+                if (!(dist < minDist))
+                    continue;
+                minDist = dist;
+                euclideanResult = nearestSegmentPoint;
+            }
+            return new PointGeomInfo
+            {
+                Entity = GetClickedEntity(hit),
+                Point = EuclideanPointToMedia(euclideanResult)
+            };
+        }
+
+        private MathNet.Spatial.Euclidean.Point3D MediaPointToEuclidean(Point3D mediaPoint)
+        {
+            return new MathNet.Spatial.Euclidean.Point3D(mediaPoint.X, mediaPoint.Y, mediaPoint.Z);
+        }
+
+        private MathNet.Spatial.Euclidean.Point2D MediaPointToEuclidean(Point mediaPoint)
+        {
+            return new MathNet.Spatial.Euclidean.Point2D(mediaPoint.X, mediaPoint.Y);
+        }
+
+        private Point3D EuclideanPointToMedia(MathNet.Spatial.Euclidean.Point3D euclideanPoint)
+        {
+            return new Point3D(euclideanPoint.X, euclideanPoint.Y, euclideanPoint.Z);
         }
 
         private IPersistEntity GetClickedEntity(RayMeshGeometry3DHitTestResult hit)
@@ -1102,8 +1329,11 @@ namespace Xbim.Presentation
             axesMeshBuilder.AddTube(path, lineThickness, 9, false);
         }
 
-        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position)
+        protected virtual RayMeshGeometry3DHitTestResult FindHit(Point position, int angleStep = 30, double pixelDistance = 10, double pixelStep = 1)
         {
+            if (angleStep <= 0 || angleStep > 90)
+                throw new ArgumentOutOfRangeException();
+
             RayMeshGeometry3DHitTestResult result = null;
             HitTestFilterCallback hitFilterCallback = oFilter =>
             {
@@ -1126,9 +1356,40 @@ namespace Xbim.Presentation
                 result = rayHit;
                 return HitTestResultBehavior.Stop;
             };
-
+                        
             var hitParams = new PointHitTestParameters(position);
             VisualTreeHelper.HitTest(Viewport.Viewport, hitFilterCallback, hitTestCallback, hitParams);
+            if (result != null)
+                return result;
+
+
+            bool continueCheck = false;
+            //check max distance fist - to optimize
+            for (int angle = 0; angle < 360; angle += angleStep)
+            {
+                Point checkedPosition = new Point(position.X + (pixelDistance * Math.Cos(angle)),
+                                                  position.Y + (pixelDistance * Math.Sin(angle)));
+                hitParams = new PointHitTestParameters(checkedPosition);
+                VisualTreeHelper.HitTest(Viewport.Viewport, hitFilterCallback, hitTestCallback, hitParams);
+                if (result != null)
+                    continueCheck = true;
+            }
+            if (!continueCheck)
+                return null;
+            //else
+
+            for (double i = 1; i < pixelDistance; i+= pixelStep)
+            {
+                for (int angle = 0; angle < 360; angle += angleStep)
+                {
+                    Point checkedPosition = new Point(position.X + (i * Math.Cos(angle)),
+                                                      position.Y + (i * Math.Sin(angle)));
+                    hitParams = new PointHitTestParameters(checkedPosition);
+                    VisualTreeHelper.HitTest(Viewport.Viewport, hitFilterCallback, hitTestCallback, hitParams);
+                    if (result != null)                    
+                        return result;
+                }                    
+            }
             return result;
         }
 
