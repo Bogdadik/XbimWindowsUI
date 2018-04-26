@@ -60,7 +60,11 @@ namespace Xbim.Presentation
                 }
             }
         }
-
+        public struct PropertyValue
+        {
+            public double Value;
+            public string UnitName;
+        }
         private IPersistEntity _entity;
 
         public IfcMetaDataControl()
@@ -188,6 +192,22 @@ namespace Xbim.Presentation
                 ctrl.DataRebind((IPersistEntity) e.NewValue);
             }
         }
+        public EntitySelection SelectedEntities
+        {
+            get { return (EntitySelection)GetValue(SelectedEntitiesProperty); }
+            set { SetValue(SelectedEntitiesProperty, value); }
+        }
+
+        //Using a DependencyProperty as the backing store for IfcInstance.This enables animation, styling, binding, etc...
+        public static readonly DependencyProperty SelectedEntitiesProperty =
+            DependencyProperty.Register("SelectedEntities", typeof(EntitySelection), typeof(IfcMetaDataControl),
+                new UIPropertyMetadata(null, OnSelectedEntitiesChanged));
+
+
+        private static void OnSelectedEntitiesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            
+        }
 
         private void DataRebind(IPersistEntity entity)
         {
@@ -197,6 +217,7 @@ namespace Xbim.Presentation
                 UpdateButtonBack();
             }
             Clear(false); //remove any bindings
+            //_entities = null;
             _entity = null;
             if (entity != null)
             {
@@ -254,10 +275,53 @@ namespace Xbim.Presentation
         private void FillQuantityData()
         {
             if (_quantities.Count > 0) return; //don't fill unless empty
-            //now the property sets for any 
+                                               //now the property sets for any 
 
-            // local cache for efficiency
-
+            var _entities = SelectedEntities;
+            if (_entities != null && _entities.Count() > 1)
+            {
+                int entitiesCount = 0;
+                List<IIfcElementQuantity> pSets = GetPSets();
+                Dictionary<string, PropertyValue> dic = new Dictionary<string, PropertyValue>();
+                var modelUnits = _entities?.FirstOrDefault(x => x != null)?
+                                .Model?.Instances?.OfType<IIfcUnitAssignment>()?.FirstOrDefault();
+                foreach (var pSet in pSets)
+                {
+                    if (pSet == null)
+                        continue;
+                    entitiesCount++;
+                    var items = pSet.Quantities.OfType<IIfcPhysicalSimpleQuantity>();
+                    foreach (var item in items)
+                    {
+                        var value = GetValue(item, modelUnits);
+                        PropertyValue oldValue;
+                        if (dic.TryGetValue(item.Name, out oldValue))
+                        {
+                            var buffer = dic[item.Name];
+                            buffer.Value += value.Value;
+                            dic[item.Name] = buffer;
+                        }
+                        else
+                            dic.Add(item.Name, value);
+                    }
+                }
+                foreach (var item in dic)
+                {
+                    var propertyValue = item.Value;
+                    _quantities.Add(new PropertyItem
+                    {
+                        Name = item.Key,
+                        Value = string.IsNullOrWhiteSpace(item.Value.UnitName) ? propertyValue.Value.ToString() 
+                                                                               : $"{propertyValue.Value.ToString()} {RegisterManager.L(propertyValue.UnitName)}"
+                    });
+                }
+                _quantities.Add(new PropertyItem
+                {
+                    Name = "Количество элементов",
+                    Value = entitiesCount.ToString()
+                });
+                return;
+            }
             var o = _entity as IIfcObject;
             if (o != null)
             {
@@ -292,6 +356,69 @@ namespace Xbim.Presentation
                 //    AddQuantityPSet(pSet, modelUnits);
                 //}
             }
+        }
+
+        private List<IIfcElementQuantity> GetPSets()
+        {
+            List<IIfcElementQuantity> pSets = new List<IIfcElementQuantity>();
+            var _entities = SelectedEntities;
+            foreach (var entity in _entities)
+            {
+                var ifcObj = entity as IIfcObject;
+                if (ifcObj != null)
+                    pSets.Add(ifcObj?.IsDefinedBy?.Where(r => r.RelatingPropertyDefinition is IIfcElementQuantity)
+                                            .FirstOrDefault()?.RelatingPropertyDefinition as IIfcElementQuantity);
+                else
+                {
+                    var asIfcTypeObject = entity as IIfcTypeObject;
+                    if (asIfcTypeObject != null)
+                        pSets.AddRange(asIfcTypeObject.HasPropertySets.OfType<IIfcElementQuantity>());
+                }
+            }
+            return pSets;
+        }
+
+        private static PropertyValue GetValue(IIfcPhysicalSimpleQuantity quantity, IIfcUnitAssignment modelUnits)
+        {
+            double value = 0;
+            var unitName = "";
+            var u = quantity.Unit;
+            if (quantity.Unit != null)
+                unitName = quantity.Unit.FullName;
+
+            var length = quantity as IIfcQuantityLength;
+            if (length != null)
+            {
+                value = length.LengthValue;
+                if (quantity.Unit == null)
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.LENGTHUNIT);
+            }
+            var area = quantity as IIfcQuantityArea;
+            if (area != null)
+            {
+                value = area.AreaValue;
+                if (quantity.Unit == null)
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.AREAUNIT);
+            }
+            var weight = quantity as IIfcQuantityWeight;
+            if (weight != null)
+            {
+                value = weight.WeightValue;
+                if (quantity.Unit == null)
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.MASSUNIT);
+            }
+            var volume = quantity as IIfcQuantityVolume;
+            if (volume != null)
+            {
+                value = volume.VolumeValue;
+                if (quantity.Unit == null)
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.VOLUMEUNIT);
+            }
+            var count = quantity as IIfcQuantityCount;
+            if (count != null)
+                value = count.CountValue;
+            
+            return new PropertyValue { Value = value, UnitName = unitName};
         }
 
         private void AddQuantityPSet(IIfcElementQuantity pSet, IIfcUnitAssignment modelUnits)
