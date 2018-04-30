@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows;
@@ -192,10 +193,25 @@ namespace Xbim.Presentation
                 ctrl.DataRebind((IPersistEntity) e.NewValue);
             }
         }
+
         public EntitySelection SelectedEntities
         {
             get { return (EntitySelection)GetValue(SelectedEntitiesProperty); }
             set { SetValue(SelectedEntitiesProperty, value); }
+        }
+
+        private void SelectedEntities_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            var selection = sender as EntitySelection;
+            if (selection.Count() == 0)
+                return;
+            if (selection.Count() > 1)
+                DataRebind(selection.First());
+            else
+            {
+                SelectedEntity = selection.First();
+                DataRebind(selection.First());
+            }
         }
 
         //Using a DependencyProperty as the backing store for IfcInstance.This enables animation, styling, binding, etc...
@@ -206,7 +222,23 @@ namespace Xbim.Presentation
 
         private static void OnSelectedEntitiesChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            
+            var ctrl = d as IfcMetaDataControl;
+            if (ctrl != null && e.NewValue is EntitySelection)
+            {
+                ctrl.DataRebind(((EntitySelection)e.NewValue).FirstOrDefault());
+                NotifyCollectionChangedEventHandler onCollectionChanged = (sender, collectionChangedEventArgs) =>
+                {
+                    ctrl.SelectedEntities_CollectionChanged(sender, collectionChangedEventArgs);
+                };
+                if (e.OldValue is INotifyCollectionChanged)
+                {
+                    ((INotifyCollectionChanged)e.OldValue).CollectionChanged -= onCollectionChanged;
+                }
+                if (e.NewValue is INotifyCollectionChanged)
+                {
+                    ((INotifyCollectionChanged)e.NewValue).CollectionChanged += onCollectionChanged;
+                }
+            }
         }
 
         private void DataRebind(IPersistEntity entity)
@@ -217,7 +249,6 @@ namespace Xbim.Presentation
                 UpdateButtonBack();
             }
             Clear(false); //remove any bindings
-            //_entities = null;
             _entity = null;
             if (entity != null)
             {
@@ -816,7 +847,7 @@ namespace Xbim.Presentation
             //    _objectProperties.Add(pi);
             //}
         }
-
+        
         public IfcStore Model
         {
             get { return (IfcStore) GetValue(ModelProperty); }
