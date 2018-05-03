@@ -61,9 +61,9 @@ namespace Xbim.Presentation
                 }
             }
         }
-        public struct PropertyValue
+        public struct QuantityValue
         {
-            public double Value;
+            public double? Value;
             public string UnitName;
         }
         private IPersistEntity _entity;
@@ -308,12 +308,12 @@ namespace Xbim.Presentation
             if (_quantities.Count > 0) return; //don't fill unless empty
                                                //now the property sets for any 
 
-            var _entities = SelectedEntities;
+            var _entities = SelectedEntities.OfType<IIfcRoot>().Where(x => !x.Name.ToString().StartsWith("svc"));
             if (_entities != null && _entities.Count() > 1)
             {
                 int entitiesCount = 0;
-                List<IIfcElementQuantity> pSets = GetPSets();
-                Dictionary<string, PropertyValue> dic = new Dictionary<string, PropertyValue>();
+                List<IIfcElementQuantity> pSets = GetPSets(_entities);
+                Dictionary<string, QuantityValue> dic = new Dictionary<string, QuantityValue>();
                 var modelUnits = _entities?.FirstOrDefault(x => x != null)?
                                 .Model?.Instances?.OfType<IIfcUnitAssignment>()?.FirstOrDefault();
                 foreach (var pSet in pSets)
@@ -324,8 +324,8 @@ namespace Xbim.Presentation
                     var items = pSet.Quantities.OfType<IIfcPhysicalSimpleQuantity>();
                     foreach (var item in items)
                     {
-                        var value = GetValue(item, modelUnits);
-                        PropertyValue oldValue;
+                        var value = GetQuantityValue(item, modelUnits);
+                        QuantityValue oldValue;
                         if (dic.TryGetValue(item.Name, out oldValue))
                         {
                             var buffer = dic[item.Name];
@@ -389,10 +389,9 @@ namespace Xbim.Presentation
             }
         }
 
-        private List<IIfcElementQuantity> GetPSets()
+        private List<IIfcElementQuantity> GetPSets(IEnumerable<IIfcRoot> _entities)
         {
             List<IIfcElementQuantity> pSets = new List<IIfcElementQuantity>();
-            var _entities = SelectedEntities;
             foreach (var entity in _entities)
             {
                 var ifcObj = entity as IIfcObject;
@@ -409,11 +408,27 @@ namespace Xbim.Presentation
             return pSets;
         }
 
-        private static PropertyValue GetValue(IIfcPhysicalSimpleQuantity quantity, IIfcUnitAssignment modelUnits)
+        private void AddQuantityPSet(IIfcElementQuantity pSet, IIfcUnitAssignment modelUnits)
         {
-            double value = 0;
-            var unitName = "";
-            var u = quantity.Unit;
+            if (pSet == null)
+                return;
+            if (modelUnits == null) throw new ArgumentNullException(nameof(modelUnits));
+            foreach (var item in pSet.Quantities.OfType<IIfcPhysicalSimpleQuantity>())
+                // currently only handles IfcPhysicalSimpleQuantity
+            {
+                _quantities.Add(new PropertyItem
+                {
+                    PropertySetName = pSet.Name,
+                    Name = item.Name,
+                    Value = GetValueString(item, modelUnits)
+                });
+            }
+        }
+
+        private static void GetValue(IIfcPhysicalSimpleQuantity quantity, IIfcUnitAssignment modelUnits, out double? value, out string unitName)
+        {
+            value = null;
+            unitName = "";
             if (quantity.Unit != null)
                 unitName = quantity.Unit.FullName;
 
@@ -438,6 +453,13 @@ namespace Xbim.Presentation
                 if (quantity.Unit == null)
                     unitName = GetUnit(modelUnits, IfcUnitEnum.MASSUNIT);
             }
+            var time = quantity as IIfcQuantityTime;
+            if (time != null)
+            {
+                value = time.TimeValue;
+                if (quantity.Unit == null)
+                    unitName = GetUnit(modelUnits, IfcUnitEnum.TIMEUNIT);
+            }
             var volume = quantity as IIfcQuantityVolume;
             if (volume != null)
             {
@@ -448,83 +470,39 @@ namespace Xbim.Presentation
             var count = quantity as IIfcQuantityCount;
             if (count != null)
                 value = count.CountValue;
-            
-            return new PropertyValue { Value = value, UnitName = unitName};
         }
-
-        private void AddQuantityPSet(IIfcElementQuantity pSet, IIfcUnitAssignment modelUnits)
+        
+        private static QuantityValue GetQuantityValue(IIfcPhysicalSimpleQuantity quantity, IIfcUnitAssignment modelUnits)
         {
-            if (pSet == null)
-                return;
-            if (modelUnits == null) throw new ArgumentNullException(nameof(modelUnits));
-            foreach (var item in pSet.Quantities.OfType<IIfcPhysicalSimpleQuantity>())
-                // currently only handles IfcPhysicalSimpleQuantity
-            {
-                _quantities.Add(new PropertyItem
-                {
-                    PropertySetName = pSet.Name,
-                    Name = item.Name,
-                    Value = GetValueString(item, modelUnits)
-                });
-            }
+            double? value = 0;
+            var unitName = "";
+            var u = quantity.Unit;
+            if (quantity.Unit != null)
+                unitName = quantity.Unit.FullName;
+
+            GetValue(quantity, modelUnits, out value, out unitName);
+
+            return new QuantityValue { Value = value, UnitName = unitName };
         }
 
         private static string GetValueString(IIfcPhysicalSimpleQuantity quantity, IIfcUnitAssignment modelUnits)
         {
             if (quantity == null)
                 return "";
-            string value = null;
+            double? value = null;
             var unitName = "";
             var u = quantity.Unit;
-            if (quantity.Unit != null)
-                unitName = quantity.Unit.FullName;
+            //if (quantity.Unit != null)
+            //    unitName = quantity.Unit.FullName;
+
+            GetValue(quantity, modelUnits, out value, out unitName);
             
-            var length = quantity as IIfcQuantityLength;
-            if (length != null)
-            {
-                value = length.LengthValue.ToString();
-                if (quantity.Unit == null)
-                    unitName = GetUnit(modelUnits, IfcUnitEnum.LENGTHUNIT);
-            }
-            var area = quantity as IIfcQuantityArea;
-            if (area != null)
-            {
-                value = area.AreaValue.ToString();
-                if (quantity.Unit == null)
-                    unitName = GetUnit(modelUnits, IfcUnitEnum.AREAUNIT);
-            }
-            var weight = quantity as IIfcQuantityWeight;
-            if (weight != null)
-            {
-                value = weight.WeightValue.ToString();
-                if (quantity.Unit == null)
-                    unitName = GetUnit(modelUnits, IfcUnitEnum.MASSUNIT);
-            }
-            var time = quantity as IIfcQuantityTime;
-            if (time != null)
-            {
-                value = time.TimeValue.ToString();
-                if (quantity.Unit == null)
-                    unitName = GetUnit(modelUnits, IfcUnitEnum.TIMEUNIT);
-            }
-            var volume = quantity as IIfcQuantityVolume;
-            if (volume != null)
-            {
-                value = volume.VolumeValue.ToString();
-                if (quantity.Unit == null)
-                    unitName = GetUnit(modelUnits, IfcUnitEnum.VOLUMEUNIT);
-            }
-            var count = quantity as IIfcQuantityCount;
-            if (count != null)
-                value = count.CountValue.ToString();
-
-
-            if (string.IsNullOrWhiteSpace(value))
+            if (string.IsNullOrWhiteSpace(value.ToString()))
                 return "";
 
             return string.IsNullOrWhiteSpace(unitName) ? 
-                value :
-                $"{value} {RegisterManager.L(unitName)}";
+                value.ToString() :
+                $"{value.ToString()} {RegisterManager.L(unitName)}";
         }
 
         private static string GetUnit(IIfcUnitAssignment units, IfcUnitEnum type)
