@@ -308,7 +308,7 @@ namespace Xbim.Presentation
             if (_quantities.Count > 0) return; //don't fill unless empty
                                                //now the property sets for any 
 
-            var _entities = SelectedEntities.OfType<IIfcRoot>().Where(x => !x.Name.ToString().StartsWith("svc"));
+            var _entities = SelectedEntities?.OfType<IIfcRoot>().Where(x => !x.Name.ToString().StartsWith("svc"));
             if (_entities != null && _entities.Count() > 1)
             {
                 int entitiesCount = 0;
