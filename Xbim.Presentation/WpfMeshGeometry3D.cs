@@ -21,6 +21,7 @@ namespace Xbim.Presentation
         private List<Int32> _unfrozenIndices;
         private List<Vector3D> _unfrozenNormals;
         XbimMeshFragmentCollection _meshes = new XbimMeshFragmentCollection();
+        private Dictionary<XbimMeshFragment, List<Point3D>> _pointsInMesh = new Dictionary<XbimMeshFragment, List<Point3D>>();
         private TriangleType _meshType;
 
         uint _previousToLastIndex;
@@ -216,7 +217,7 @@ namespace Xbim.Presentation
         }
 
         public MeshGeometry3D Mesh
-        {
+        { 
             get
             {
                 if (WpfModel == null)
@@ -711,18 +712,20 @@ namespace Xbim.Presentation
         public void Add(byte[] mesh, short productTypeId, int productLabel, int geometryLabel, XbimMatrix3D? transform = null, short modelId = 0)
         {
             var frag = new XbimMeshFragment(PositionCount, TriangleIndexCount, productTypeId, productLabel, geometryLabel, modelId);
-            Read(mesh, transform);
+            List<Point3D> positions = new List<Point3D>();
+            Read(mesh, transform, positions);
             frag.EndPosition = PositionCount - 1;
             frag.EndTriangleIndex = TriangleIndexCount - 1;
+            _pointsInMesh.Add(frag, positions);
             _meshes.Add(frag);
-        }
+        }    
 
         /// <summary>
         /// Reads a triangulated mesh from a byte array 
         /// </summary>
         /// <param name="mesh">the binary data of the mesh</param>
         /// <param name="transform">transforms the mesh if the matrix is not null</param>
-        public void Read(byte[] mesh, XbimMatrix3D? transform = null)
+        public void Read(byte[] mesh, XbimMatrix3D? transform = null, List<Point3D> positions = null)
         {
             int indexBase = _unfrozenPositions.Count;
             var qrd = new RotateTransform3D();
@@ -758,6 +761,8 @@ namespace Xbim.Presentation
                         if (matrix3D.HasValue)
                             wpfPosition = matrix3D.Value.Transform(wpfPosition);
                         _unfrozenPositions.Add(wpfPosition);
+                        if (positions != null)
+                            positions.Add(wpfPosition);
 
                         var wpfNormal = new Vector3D(floatsArray[3], floatsArray[4], floatsArray[5]);
                         if (qrd != null) //transform the normal if we have to
@@ -786,6 +791,7 @@ namespace Xbim.Presentation
             _unfrozenNormals = null;
             Mesh.Freeze();
         }
+
         public void BeginUpdate()
         {
             _unfrozenPositions = new List<Point3D>(Mesh.Positions);
@@ -793,6 +799,57 @@ namespace Xbim.Presentation
             _unfrozenNormals = new List<Vector3D>(Mesh.Normals);
             WpfModel.Geometry = null;
         }
+
+        public void HideProductFragments(int productLabel)
+        {
+            foreach (var fr in _meshes.Where(f=>f.EntityLabel == productLabel))
+            {
+                for (int i = fr.StartPosition; i<fr.EndPosition;i++)
+                {
+                    _unfrozenPositions[i] = new Point3D();
+                }
+            }
+        }
+
+        public void HideProductFragments(HashSet<int> productLabelsSet)
+        {
+            foreach (var fr in _meshes.Where(f => productLabelsSet.Contains(f.EntityLabel)))
+            {
+                for (int i = fr.StartPosition; i < fr.EndPosition; i++)
+                {
+                    _unfrozenPositions[i] = new Point3D();
+                }
+            }
+        }
+
+        public void ShowProductFragments(int productLabel)
+        {
+            foreach (var fr in _meshes.Where(f => f.EntityLabel == productLabel))
+            {
+                List<Point3D> positions;
+                if (!_pointsInMesh.TryGetValue(fr, out positions))
+                    continue;
+                for (int i = fr.StartPosition, j = 0; i < fr.EndPosition; i++,j++)
+                {                    
+                    _unfrozenPositions[i] = positions[j];
+                }
+            }
+        }
+
+        public void ShowProductFragments(HashSet<int> productLabelsSet)
+        {
+            foreach (var fr in _meshes.Where(f => productLabelsSet.Contains(f.EntityLabel)))
+            {
+                List<Point3D> positions;
+                if (!_pointsInMesh.TryGetValue(fr, out positions))
+                    continue;
+                for (int i = fr.StartPosition, j = 0; i < fr.EndPosition; i++, j++)
+                {
+                    _unfrozenPositions[i] = positions[j];
+                }
+            }
+        }
+
 
         public void Add(string mesh, Type productType, int productLabel, int geometryLabel, XbimMatrix3D? transform = null, short modelId = 0)
         {

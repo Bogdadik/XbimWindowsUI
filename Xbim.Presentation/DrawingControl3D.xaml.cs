@@ -204,7 +204,7 @@ namespace Xbim.Presentation
             {
                 if (plane != null)
                 {
-                    ClearCutPlane();
+                    DisabledCutPlane();
                 }
                 ClipPlaneHandlesHide();
                 ClipHandler = null;
@@ -243,7 +243,7 @@ namespace Xbim.Presentation
 
                 var p = new Point3D(newMatrix.OffsetX, newMatrix.OffsetY, newMatrix.OffsetZ);
                 var n = newMatrix.Transform(new Vector3D(0, 0, -1));
-                ClearCutPlane();
+                DisabledCutPlane();
                 SetCutPlane(p.X, p.Y, p.Z, n.X, n.Y, n.Z);
             }
             base.OnPreviewKeyUp(e);
@@ -428,18 +428,55 @@ namespace Xbim.Presentation
             cpg.IsEnabled = true;
         }
 
-        public void ClearCutPlane()
+        public void DisabledCutPlane()
         {
-            ClearNamedCutPlane(CuttingGroup);
-            ClearNamedCutPlane(CuttingGroupT);
+            DisabledNamedCutPlane(CuttingGroup);
+            DisabledNamedCutPlane(CuttingGroupT);                
         }
 
-        private static void ClearNamedCutPlane(CuttingPlaneGroup cpg)
+        public void EnabledCutPlane()
+        {
+            EnabledNamedCutPlane(CuttingGroup);
+            EnabledNamedCutPlane(CuttingGroupT);
+        }
+
+        public bool IsCutPlaneEnabled()
+        {
+            return CuttingGroup.IsEnabled;
+        }
+
+        private static void DisabledNamedCutPlane(CuttingPlaneGroup cpg)
         {
             if (cpg != null)
             {
-                cpg.IsEnabled = false;
+                cpg.IsEnabled = false;                
             }
+        }
+        private static void EnabledNamedCutPlane(CuttingPlaneGroup cpg)
+        {
+            if (cpg != null)
+            {
+                cpg.IsEnabled = true;
+            }
+        }
+
+        public void RecalculateCutPlane()
+        {
+            bool isEnbl;
+            //recalculate cutting 
+            isEnbl = CuttingGroup.IsEnabled;
+            CuttingGroup.Children.Clear();
+            //recalculation when checked Enabled flag
+            CuttingGroup.IsEnabled = true;
+            CuttingGroup.Children.Add(Opaques);
+            CuttingGroup.IsEnabled = isEnbl;
+
+            //recalculate cuttingT
+            isEnbl = CuttingGroupT.IsEnabled;
+            CuttingGroupT.Children.Clear();
+            CuttingGroupT.IsEnabled = true;
+            CuttingGroupT.Children.Add(Transparents);
+            CuttingGroupT.IsEnabled = isEnbl;
         }
 
         #endregion
@@ -1429,7 +1466,7 @@ namespace Xbim.Presentation
             }
 
             if (!options.HasFlag(ModelRefreshOptions.ViewPreserveCuttingPlane))
-                ClearCutPlane();
+                DisabledCutPlane();
 
             if (!options.HasFlag(ModelRefreshOptions.ViewPreserveSelectedRegion))
                 ModelPositions = new XbimModelPositioningCollection();
@@ -1558,8 +1595,8 @@ namespace Xbim.Presentation
                 }
             }
             RecalculateView(options);
-        }
-        
+        }     
+
         private void LoadReferencedModel(IReferencedModel refModel)
         {
             if (refModel.Model == null)
