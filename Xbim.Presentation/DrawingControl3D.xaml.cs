@@ -1167,6 +1167,8 @@ namespace Xbim.Presentation
                     var p1 = m.TriangleIndices[i];
                     var p2 = m.TriangleIndices[i + 1];
                     var p3 = m.TriangleIndices[i + 2];
+                    if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                        continue;
 
                     if (nor[p1] == nor[p2] && nor[p1] == nor[p3]) // same normals
                     {
@@ -1194,7 +1196,8 @@ namespace Xbim.Presentation
                         var p1 = m.TriangleIndices[i];
                         var p2 = m.TriangleIndices[i + 1];
                         var p3 = m.TriangleIndices[i + 2];
-
+                        if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                            continue;
                         // box evaluation
                         box.Union(pos[p1]);
                         box.Union(pos[p2]);
@@ -1209,7 +1212,8 @@ namespace Xbim.Presentation
                         var p1 = m.TriangleIndices[i];
                         var p2 = m.TriangleIndices[i + 1];
                         var p3 = m.TriangleIndices[i + 2];
-
+                        if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                            continue;
                         var path = new List<Point3D>
                         {
                             new Point3D(pos[p1].X, pos[p1].Y, pos[p1].Z),
@@ -1251,7 +1255,8 @@ namespace Xbim.Presentation
             {
                 if (SelectionBehaviour == SelectionBehaviours.MultipleSelection)
                 {
-                    m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);
+                    //m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);
+                    m = WpfMeshGeometry3D.GetGeometry(Selection, mat, (DefaultLayerStyler as SurfaceLayerStyler)?.MeshesByModel);
                 }
                 else if (newVal != null) // single element selection, requires the newval to get the model
                 {

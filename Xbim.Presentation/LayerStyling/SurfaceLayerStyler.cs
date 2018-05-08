@@ -23,12 +23,9 @@ namespace Xbim.Presentation.LayerStyling
         // ReSharper disable once CollectionNeverUpdated.Local
         readonly XbimColourMap _colourMap = new XbimColourMap();
 
-        public bool UseMaps = false;
-
-        public Dictionary<int, Dictionary<int, HashSet<WpfMeshGeometry3D>>> ModelMeshesByStyle = new Dictionary<int, Dictionary<int, HashSet<WpfMeshGeometry3D>>>();//model id-> geometries(style, mesh set);
+        public Dictionary<int, HashSet<WpfMeshGeometry3D>> MeshesByModel = new Dictionary<int, HashSet<WpfMeshGeometry3D>>();//model id-> meshes set; // complex mesh to use in selection
+        public Dictionary<int, Dictionary<int, HashSet<WpfMeshGeometry3D>>> ModelMeshesByStyle = new Dictionary<int, Dictionary<int, HashSet<WpfMeshGeometry3D>>>();//model id-> geometries(style, mesh set); //in view
         public Dictionary<int, Dictionary<int, HashSet<int>>> ModelStyleByProduct = new Dictionary<int, Dictionary<int, HashSet<int>>>(); //model -> (product, style)
-
-        public bool UseStoreGeometries = true;
 
         /// <summary>
         /// This version uses the new Geometry representation
@@ -51,15 +48,12 @@ namespace Xbim.Presentation.LayerStyling
             {
                 using (var geomReader = geomStore.BeginRead())
                 {
-                    var materialsByStyleId = new Dictionary<int, WpfMaterial>();
-                    var repeatedShapeGeometries = new Dictionary<int, MeshGeometry3D>();
-                    var meshesByStyleId = new Dictionary<int, WpfMeshGeometry3D>();
                     var tmpOpaquesGroup = new Model3DGroup();
                     var tmpTransparentsGroup = new Model3DGroup();
-                    var tmpTransparentsGroup1 = new Model3DGroup();
 
-                    var meshesSetByStyleId = new Dictionary<int, HashSet<WpfMeshGeometry3D>>();
+                    var materialsByStyleId = new Dictionary<int, WpfMaterial>();
                     var styleByProduct = new Dictionary<int, HashSet<int>>();
+                    var meshesSetByStyleId = new Dictionary<int, HashSet<WpfMeshGeometry3D>>();
 
                     //get a list of all the unique style ids then build their style and mesh
                     var sstyleIds = geomReader.StyleIds;
@@ -69,33 +63,33 @@ namespace Xbim.Presentation.LayerStyling
                         materialsByStyleId.Add(styleId, wpfMaterial);
 
                         var mg = GetNewStyleMesh(wpfMaterial, tmpTransparentsGroup, tmpOpaquesGroup);
-                        if (UseStoreGeometries)
+
+                        HashSet<WpfMeshGeometry3D> tmpHashSet;
+                        if (!meshesSetByStyleId.TryGetValue(styleId, out tmpHashSet))
                         {
-                            HashSet<WpfMeshGeometry3D> tmpHashSet;
-                            if (!meshesSetByStyleId.TryGetValue(styleId, out tmpHashSet))
-                            {
-                                tmpHashSet = new HashSet<WpfMeshGeometry3D>();
-                                meshesSetByStyleId.Add(styleId, tmpHashSet);
-                            }
-                            tmpHashSet.Add(mg);
+                            tmpHashSet = new HashSet<WpfMeshGeometry3D>();
+                            meshesSetByStyleId.Add(styleId, tmpHashSet);
                         }
-                        else
-                            meshesByStyleId.Add(styleId, mg);
+                        tmpHashSet.Add(mg);
                     }
-                    
-                    var shapeInstances = GetShapeInstancesToRender(geomReader, excludedTypes);
+                    var modelMeshes = new HashSet<WpfMeshGeometry3D>();
+                    //Add first empty mesh to modelMeshes
+                    var modelMesh = new WpfMeshGeometry3D();
+                    modelMesh.WpfModel.SetValue(FrameworkElement.TagProperty, modelMesh);
+                    modelMesh.BeginUpdate();
+                    modelMeshes.Add(modelMesh);
+                    //
+
                     var tot = 1;
                     if (ProgressChanged != null)
                     {
                         // only enumerate if there's a need for progress update
-                        tot = shapeInstances.Count();
+                        tot = geomReader.ShapeInstances.Count();
                     }
                     var prog = 0;
                     var lastProgress = 0;
 
-                    // !typeof (IfcFeatureElement).IsAssignableFrom(IfcMetaData.GetType(s.IfcTypeId)) /*&&
-                    // !typeof(IfcSpace).IsAssignableFrom(IfcMetaData.GetType(s.IfcTypeId))*/);
-                    foreach (var shapeInstance in shapeInstances)
+                    foreach (var shapeInstance in geomReader.ShapeInstances)
                     {
                         // logging 
                         if (ProgressChanged != null)
@@ -108,20 +102,30 @@ namespace Xbim.Presentation.LayerStyling
                             }
                         }
 
-                        // work out style
-                        var styleId = shapeInstance.StyleLabel > 0
-                            ? shapeInstance.StyleLabel
-                            : shapeInstance.IfcTypeId * -1;
+                        IXbimShapeGeometryData shapeGeom = geomReader.ShapeGeometry(shapeInstance.ShapeGeometryLabel);
+                        if (shapeGeom.Format != (byte)XbimGeometryType.PolyhedronBinary)
+                            continue;
 
-                        if (!materialsByStyleId.ContainsKey(styleId))
+                        var transform = XbimMatrix3D.Multiply(shapeInstance.Transformation, modelTransform);
+
+                        bool isExclude = excludedTypes.Contains(shapeInstance.IfcTypeId);
+                        if (!isExclude && shapeInstance.RepresentationType == XbimGeometryRepresentationType.OpeningsAndAdditionsIncluded)
                         {
-                            // if the style is not available we build one by ExpressType
-                            var material2 = GetWpfMaterialByType(model, shapeInstance.IfcTypeId);
-                            materialsByStyleId.Add(styleId, material2);
+                            //to render cache and selection cache
 
-                            var mg = GetNewStyleMesh(material2, tmpTransparentsGroup, tmpOpaquesGroup);
-                            if (UseStoreGeometries)
+                            // work out style
+                            var styleId = shapeInstance.StyleLabel > 0
+                                ? shapeInstance.StyleLabel
+                                : shapeInstance.IfcTypeId * -1;
+                            
+                            if (!materialsByStyleId.ContainsKey(styleId))
                             {
+                                // if the style is not available we build one by ExpressType
+                                var material = GetWpfMaterialByType(model, shapeInstance.IfcTypeId);
+                                materialsByStyleId.Add(styleId, material);
+
+                                var mg = GetNewStyleMesh(material, tmpTransparentsGroup, tmpOpaquesGroup);
+
                                 HashSet<WpfMeshGeometry3D> tmpHashSet;
                                 if (!meshesSetByStyleId.TryGetValue(styleId, out tmpHashSet))
                                 {
@@ -130,159 +134,131 @@ namespace Xbim.Presentation.LayerStyling
                                 }
                                 tmpHashSet.Add(mg);
                             }
-                            else
-                                meshesByStyleId.Add(styleId, mg);
-                        }
 
-                        //GET THE ACTUAL GEOMETRY 
-                        MeshGeometry3D wpfMesh;
-                        //see if we have already read it
-                        if (UseMaps && repeatedShapeGeometries.TryGetValue(shapeInstance.ShapeGeometryLabel, out wpfMesh))
-                        {
-                            var mg = new GeometryModel3D(wpfMesh, materialsByStyleId[styleId]);
-                            mg.SetValue(FrameworkElement.TagProperty,
-                                new XbimInstanceHandle(model, shapeInstance.IfcProductLabel, shapeInstance.IfcTypeId));
-                            mg.BackMaterial = mg.Material;
-                            mg.Transform =
-                                XbimMatrix3D.Multiply(shapeInstance.Transformation,
-                                    modelTransform)
-                                    .ToMatrixTransform3D();
-                            if (materialsByStyleId[styleId].IsTransparent)
-                                tmpTransparentsGroup.Children.Add(mg);
-                            else
-                                tmpOpaquesGroup.Children.Add(mg);
-                        }
-                        else //we need to get the shape geometry
-                        {
-                            IXbimShapeGeometryData shapeGeom = geomReader.ShapeGeometry(shapeInstance.ShapeGeometryLabel);
+                            //GET THE ACTUAL GEOMETRY
 
-                            if (UseMaps && shapeGeom.ReferenceCount > 1) //only store if we are going to use again
+                            #region For Render
                             {
-                                wpfMesh = new MeshGeometry3D();
-                                switch ((XbimGeometryType)shapeGeom.Format)
+                                //merge last mesh  (we combine meshes to one(or more) big for fast rendering)
+                                var targetMergeMeshByStyle = meshesSetByStyleId[styleId].Last();
+
+                                // replace target mesh beyond suggested size 
+                                // https://docs.microsoft.com/en-us/dotnet/framework/wpf/graphics-multimedia/maximize-wpf-3d-performance
+                                // 
+                                // if very big - create new mesh
+                                if (targetMergeMeshByStyle.PositionCount > 20000
+                                    ||
+                                    targetMergeMeshByStyle.TriangleIndexCount > 60000)
                                 {
-                                    case XbimGeometryType.PolyhedronBinary:
-                                        wpfMesh.Read(shapeGeom.ShapeData);
-                                        break;
-                                    case XbimGeometryType.Polyhedron:
-                                        wpfMesh.Read(((XbimShapeGeometry)shapeGeom).ShapeData);
-                                        break;
+                                    targetMergeMeshByStyle.EndUpdate();
+                                    var newTargetMergeMeshByStyle = GetNewStyleMesh(materialsByStyleId[styleId], tmpTransparentsGroup, tmpOpaquesGroup);
+
+                                    HashSet<WpfMeshGeometry3D> tmpHashSet;
+                                    if (!meshesSetByStyleId.TryGetValue(styleId, out tmpHashSet))
+                                    {
+                                        tmpHashSet = new HashSet<WpfMeshGeometry3D>();
+                                        meshesSetByStyleId.Add(styleId, tmpHashSet);
+                                    }
+                                    tmpHashSet.Add(newTargetMergeMeshByStyle);
+                                    targetMergeMeshByStyle = newTargetMergeMeshByStyle;
                                 }
-                                repeatedShapeGeometries.Add(shapeInstance.ShapeGeometryLabel, wpfMesh);
-                                var mg = new GeometryModel3D(wpfMesh, materialsByStyleId[styleId]);
-                                mg.SetValue(FrameworkElement.TagProperty,
-                                    new XbimInstanceHandle(model, shapeInstance.IfcProductLabel, shapeInstance.IfcTypeId));
-                                mg.BackMaterial = mg.Material;
-                                mg.Transform = XbimMatrix3D.Multiply(shapeInstance.Transformation, modelTransform).ToMatrixTransform3D();
-                                if (materialsByStyleId[styleId].IsTransparent)
-                                    tmpTransparentsGroup.Children.Add(mg);
-                                else
-                                    tmpOpaquesGroup.Children.Add(mg);
+                                // end replace                                                                       
+                                targetMergeMeshByStyle.Add(
+                                    shapeGeom.ShapeData,
+                                    shapeInstance.IfcTypeId,
+                                    shapeInstance.IfcProductLabel,
+                                    shapeInstance.InstanceLabel, transform,
+                                    (short)model.UserDefinedId);
+
+                                HashSet<int> productStyleSet;
+                                if (!styleByProduct.TryGetValue(shapeInstance.IfcProductLabel, out productStyleSet))
+                                {
+                                    productStyleSet = new HashSet<int>();
+                                    styleByProduct.Add(shapeInstance.IfcProductLabel, productStyleSet);
+                                }
+                                productStyleSet.Add(styleId);
                             }
-                            else //it is a one off, merge it with shapes of same style
+                            #endregion
+                            #region For Selection                            
+                            // get big meshes of model for fast future selection
                             {
-                                if (UseStoreGeometries) // default 
+                                //get last
+                                var targetModelMesh = modelMeshes.Last(); ;
+
+                                if (targetModelMesh.PositionCount > 20000
+                                   ||
+                                   targetModelMesh.TriangleIndexCount > 60000)
                                 {
-                                    //merge last mesh
-                                    var targetMergeMeshByStyle = meshesSetByStyleId[styleId].Last();
+                                    targetModelMesh.EndUpdate();
 
-                                    // replace target mesh beyond suggested size
-                                    // https://docs.microsoft.com/en-us/dotnet/framework/wpf/graphics-multimedia/maximize-wpf-3d-performance
-                                    // 
-                                    if (targetMergeMeshByStyle.PositionCount > 20000
-                                        ||
-                                        targetMergeMeshByStyle.TriangleIndexCount > 60000
-                                    )
-                                    {
-                                        targetMergeMeshByStyle.EndUpdate();
-                                        var replace = GetNewStyleMesh(materialsByStyleId[styleId], tmpTransparentsGroup, tmpOpaquesGroup);
+                                    var newTargetModelMesh = new WpfMeshGeometry3D();
+                                    newTargetModelMesh.WpfModel.SetValue(FrameworkElement.TagProperty, newTargetModelMesh);
+                                    newTargetModelMesh.BeginUpdate();
+                                    modelMeshes.Add(newTargetModelMesh);
 
-                                        HashSet<WpfMeshGeometry3D> tmpHashSet;
-                                        if (!meshesSetByStyleId.TryGetValue(styleId, out tmpHashSet))
-                                        {
-                                            tmpHashSet = new HashSet<WpfMeshGeometry3D>();
-                                            meshesSetByStyleId.Add(styleId, tmpHashSet);
-                                        }
-                                        tmpHashSet.Add(replace);
-                                        targetMergeMeshByStyle = replace;
-                                    }
-                                    // end replace
-
-                                    if (shapeGeom.Format != (byte)XbimGeometryType.PolyhedronBinary)
-                                        continue;
-                                    var transform = XbimMatrix3D.Multiply(shapeInstance.Transformation, modelTransform);
-                                    targetMergeMeshByStyle.Add(
-                                        shapeGeom.ShapeData,
-                                        shapeInstance.IfcTypeId,
-                                        shapeInstance.IfcProductLabel,
-                                        shapeInstance.InstanceLabel, transform,
-                                        (short)model.UserDefinedId);
-
-                                    HashSet<int> productStyleSet;
-                                    if (!styleByProduct.TryGetValue(shapeInstance.IfcProductLabel, out productStyleSet))
-                                    {
-                                        productStyleSet = new HashSet<int>();
-                                        styleByProduct.Add(shapeInstance.IfcProductLabel, productStyleSet);
-                                    }
-                                    productStyleSet.Add(styleId);
+                                    targetModelMesh = newTargetModelMesh;
                                 }
-                                else
-                                {
-                                    var targetMergeMeshByStyle = meshesByStyleId[styleId];
 
-                                    // replace target mesh beyond suggested size
-                                    // https://docs.microsoft.com/en-us/dotnet/framework/wpf/graphics-multimedia/maximize-wpf-3d-performance
-                                    // 
-                                    if (targetMergeMeshByStyle.PositionCount > 20000
-                                        ||
-                                        targetMergeMeshByStyle.TriangleIndexCount > 60000
-                                    )
-                                    {
-                                        targetMergeMeshByStyle.EndUpdate();
-                                        var replace = GetNewStyleMesh(materialsByStyleId[styleId], tmpTransparentsGroup, tmpOpaquesGroup);
-                                        meshesByStyleId[styleId] = replace;
-                                        targetMergeMeshByStyle = replace;
-                                    }
-                                    // end replace
-
-                                    if (shapeGeom.Format != (byte)XbimGeometryType.PolyhedronBinary)
-                                        continue;
-                                    var transform = XbimMatrix3D.Multiply(shapeInstance.Transformation, modelTransform);
-                                    targetMergeMeshByStyle.Add(
-                                        shapeGeom.ShapeData,
-                                        shapeInstance.IfcTypeId,
-                                        shapeInstance.IfcProductLabel,
-                                        shapeInstance.InstanceLabel, transform,
-                                        (short)model.UserDefinedId);                                    
-                                }
+                                targetModelMesh.Add(
+                                    shapeGeom.ShapeData,
+                                    shapeInstance.IfcTypeId,
+                                    shapeInstance.IfcProductLabel,
+                                    shapeInstance.InstanceLabel, transform,
+                                    (short)model.UserDefinedId);
                             }
+                            #endregion
+                        }
+                        if (isExclude)
+                        {
+                            //only to selection cache
+
+                            var targetModelMesh = modelMeshes.Last(); ;
+
+                            if (targetModelMesh.PositionCount > 20000
+                               ||
+                               targetModelMesh.TriangleIndexCount > 60000)
+                            {
+                                targetModelMesh.EndUpdate();
+
+                                var newTargetModelMesh = new WpfMeshGeometry3D();
+                                newTargetModelMesh.WpfModel.SetValue(FrameworkElement.TagProperty, newTargetModelMesh);
+                                newTargetModelMesh.BeginUpdate();
+                                modelMeshes.Add(newTargetModelMesh);
+
+                                targetModelMesh = newTargetModelMesh;
+                            }
+
+                            targetModelMesh.Add(
+                                shapeGeom.ShapeData,
+                                shapeInstance.IfcTypeId,
+                                shapeInstance.IfcProductLabel,
+                                shapeInstance.InstanceLabel, transform,
+                                (short)model.UserDefinedId);
+
                         }
                     }
 
                     if (ModelStyleByProduct.ContainsKey(model.UserDefinedId))
                         ModelStyleByProduct[model.UserDefinedId] = styleByProduct;
                     else
-                        ModelStyleByProduct.Add(model.UserDefinedId, styleByProduct);                    
+                        ModelStyleByProduct.Add(model.UserDefinedId, styleByProduct);
+
+                    foreach (var wpfMeshGeometry3DSet in meshesSetByStyleId.Values)
+                    {
+                        wpfMeshGeometry3DSet.Last().EndUpdate();
+                    }
 
                     if (ModelMeshesByStyle.ContainsKey(model.UserDefinedId))
-                        ModelMeshesByStyle[model.UserDefinedId] = meshesSetByStyleId;                    
+                        ModelMeshesByStyle[model.UserDefinedId] = meshesSetByStyleId;
                     else
                         ModelMeshesByStyle.Add(model.UserDefinedId, meshesSetByStyleId);
 
-                    if (UseStoreGeometries)
-                    {
-                        foreach (var wpfMeshGeometry3DSet in meshesSetByStyleId.Values)
-                        {
-                            wpfMeshGeometry3DSet.Last().EndUpdate();
-                        }
-                    }
+                    modelMeshes.Last().EndUpdate();
+                    if (MeshesByModel.ContainsKey(model.UserDefinedId))
+                        MeshesByModel[model.UserDefinedId] = modelMeshes;
                     else
-                    {
-                        foreach (var wpfMeshGeometry3D in meshesByStyleId.Values)
-                        {
-                            wpfMeshGeometry3D.EndUpdate();
-                        }
-                    }
+                        MeshesByModel.Add(model.UserDefinedId, modelMeshes);                   
+
                     if (tmpOpaquesGroup.Children.Any())
                     {
                         var mv = new ModelVisual3D { Content = tmpOpaquesGroup };
