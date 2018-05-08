@@ -204,7 +204,7 @@ namespace Xbim.Presentation
             {
                 if (plane != null)
                 {
-                    ClearCutPlane();
+                    DisabledCutPlane();
                 }
                 ClipPlaneHandlesHide();
                 ClipHandler = null;
@@ -243,7 +243,7 @@ namespace Xbim.Presentation
 
                 var p = new Point3D(newMatrix.OffsetX, newMatrix.OffsetY, newMatrix.OffsetZ);
                 var n = newMatrix.Transform(new Vector3D(0, 0, -1));
-                ClearCutPlane();
+                DisabledCutPlane();
                 SetCutPlane(p.X, p.Y, p.Z, n.X, n.Y, n.Z);
             }
             base.OnPreviewKeyUp(e);
@@ -428,18 +428,55 @@ namespace Xbim.Presentation
             cpg.IsEnabled = true;
         }
 
-        public void ClearCutPlane()
+        public void DisabledCutPlane()
         {
-            ClearNamedCutPlane(CuttingGroup);
-            ClearNamedCutPlane(CuttingGroupT);
+            DisabledNamedCutPlane(CuttingGroup);
+            DisabledNamedCutPlane(CuttingGroupT);                
         }
 
-        private static void ClearNamedCutPlane(CuttingPlaneGroup cpg)
+        public void EnabledCutPlane()
+        {
+            EnabledNamedCutPlane(CuttingGroup);
+            EnabledNamedCutPlane(CuttingGroupT);
+        }
+
+        public bool IsCutPlaneEnabled()
+        {
+            return CuttingGroup.IsEnabled;
+        }
+
+        private static void DisabledNamedCutPlane(CuttingPlaneGroup cpg)
         {
             if (cpg != null)
             {
-                cpg.IsEnabled = false;
+                cpg.IsEnabled = false;                
             }
+        }
+        private static void EnabledNamedCutPlane(CuttingPlaneGroup cpg)
+        {
+            if (cpg != null)
+            {
+                cpg.IsEnabled = true;
+            }
+        }
+
+        public void RecalculateCutPlane()
+        {
+            bool isEnbl;
+            //recalculate cutting 
+            isEnbl = CuttingGroup.IsEnabled;
+            CuttingGroup.Children.Clear();
+            //recalculation when checked Enabled flag
+            CuttingGroup.IsEnabled = true;
+            CuttingGroup.Children.Add(Opaques);
+            CuttingGroup.IsEnabled = isEnbl;
+
+            //recalculate cuttingT
+            isEnbl = CuttingGroupT.IsEnabled;
+            CuttingGroupT.Children.Clear();
+            CuttingGroupT.IsEnabled = true;
+            CuttingGroupT.Children.Add(Transparents);
+            CuttingGroupT.IsEnabled = isEnbl;
         }
 
         #endregion
@@ -1130,6 +1167,8 @@ namespace Xbim.Presentation
                     var p1 = m.TriangleIndices[i];
                     var p2 = m.TriangleIndices[i + 1];
                     var p3 = m.TriangleIndices[i + 2];
+                    if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                        continue;
 
                     if (nor[p1] == nor[p2] && nor[p1] == nor[p3]) // same normals
                     {
@@ -1157,7 +1196,8 @@ namespace Xbim.Presentation
                         var p1 = m.TriangleIndices[i];
                         var p2 = m.TriangleIndices[i + 1];
                         var p3 = m.TriangleIndices[i + 2];
-
+                        if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                            continue;
                         // box evaluation
                         box.Union(pos[p1]);
                         box.Union(pos[p2]);
@@ -1172,7 +1212,8 @@ namespace Xbim.Presentation
                         var p1 = m.TriangleIndices[i];
                         var p2 = m.TriangleIndices[i + 1];
                         var p3 = m.TriangleIndices[i + 2];
-
+                        if (pos[p1].Equals(XbimPoint3D.Zero) && pos[p1].Equals(pos[p2]) && pos[p1].Equals(pos[p3]))
+                            continue;
                         var path = new List<Point3D>
                         {
                             new Point3D(pos[p1].X, pos[p1].Y, pos[p1].Z),
@@ -1214,7 +1255,8 @@ namespace Xbim.Presentation
             {
                 if (SelectionBehaviour == SelectionBehaviours.MultipleSelection)
                 {
-                    m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);
+                    //m = WpfMeshGeometry3D.GetGeometry(Selection, ModelPositions, mat);
+                    m = WpfMeshGeometry3D.GetGeometry(Selection, mat, (DefaultLayerStyler as SurfaceLayerStyler)?.MeshesByModel);
                 }
                 else if (newVal != null) // single element selection, requires the newval to get the model
                 {
@@ -1429,7 +1471,7 @@ namespace Xbim.Presentation
             }
 
             if (!options.HasFlag(ModelRefreshOptions.ViewPreserveCuttingPlane))
-                ClearCutPlane();
+                DisabledCutPlane();
 
             if (!options.HasFlag(ModelRefreshOptions.ViewPreserveSelectedRegion))
                 ModelPositions = new XbimModelPositioningCollection();
@@ -1558,8 +1600,8 @@ namespace Xbim.Presentation
                 }
             }
             RecalculateView(options);
-        }
-        
+        }     
+
         private void LoadReferencedModel(IReferencedModel refModel)
         {
             if (refModel.Model == null)
