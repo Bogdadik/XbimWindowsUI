@@ -317,10 +317,10 @@ namespace Xbim.Presentation
                 var modelUnits = _entities?.FirstOrDefault(x => x != null)?
                                 .Model?.Instances?.OfType<IIfcUnitAssignment>()?.FirstOrDefault();
                 foreach (var pSet in pSets)
-                {
+                {                   
+                    entitiesCount++;
                     if (pSet == null)
                         continue;
-                    entitiesCount++;
                     var items = pSet.Quantities.OfType<IIfcPhysicalSimpleQuantity>();
                     foreach (var item in items)
                     {
