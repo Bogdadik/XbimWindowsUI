@@ -348,7 +348,7 @@ namespace Xbim.Presentation
                 }
                 _quantities.Add(new PropertyItem
                 {
-                    Name = "Количество элементов",
+                    Name = RegisterManager.L("NumberOfElements"),
                     Value = entitiesCount.ToString()
                 });
                 return;
