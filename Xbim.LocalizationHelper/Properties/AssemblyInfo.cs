@@ -10,9 +10,9 @@ using System.Windows;
 [assembly: AssemblyTitle("Xbim.LocalizationHelper")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Microsoft")]
+[assembly: AssemblyCompany("Allbau Software")]
 [assembly: AssemblyProduct("Xbim.LocalizationHelper")]
-[assembly: AssemblyCopyright("Copyright © Microsoft 2017")]
+[assembly: AssemblyCopyright("Copyright © Allbau Software, 2018")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
