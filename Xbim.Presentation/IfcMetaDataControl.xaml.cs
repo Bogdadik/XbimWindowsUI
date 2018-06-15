@@ -88,7 +88,7 @@ namespace Xbim.Presentation
             _materialGroups = new ListCollectionView(_materials);
             _materialGroups.GroupDescriptions?.Add(new PropertyGroupDescription("PropertySetName"));
         }
-
+        
         private void TheTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (e.AddedItems.Count <= 0)
@@ -102,19 +102,25 @@ namespace Xbim.Presentation
             //only fill tabs on demand when they are activated
             if (selectedTab == null)
                 return;
-
-            // ReSharper disable PossibleUnintendedReferenceComparison
-            if (selectedTab == ObjectTab)
-                FillObjectData();
-            else if (selectedTab == TypeTab)
-                FillTypeData();
-            else if (selectedTab == PropertyTab)
-                FillPropertyData();
-            else if (selectedTab == QuantityTab)
-                FillQuantityData();
-            else if (selectedTab == MaterialTab)
-                FillMaterialData();
-            // ReSharper restore PossibleUnintendedReferenceComparison
+            try
+            {
+                // ReSharper disable PossibleUnintendedReferenceComparison
+                if (selectedTab == ObjectTab)
+                    FillObjectData();
+                else if (selectedTab == TypeTab)
+                    FillTypeData();
+                else if (selectedTab == PropertyTab)
+                    FillPropertyData();
+                else if (selectedTab == QuantityTab)
+                    FillQuantityData();
+                else if (selectedTab == MaterialTab)
+                    FillMaterialData();
+                // ReSharper restore PossibleUnintendedReferenceComparison
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
         }
 
         private readonly ListCollectionView _propertyGroups;
@@ -308,7 +314,7 @@ namespace Xbim.Presentation
             if (_quantities.Count > 0) return; //don't fill unless empty
                                                //now the property sets for any 
 
-            var _entities = SelectedEntities?.OfType<IIfcRoot>().Where(x => !x.Name.ToString().StartsWith("svc"));
+            var _entities = SelectedEntities?.OfType<IIfcRoot>();//.Where(x => !x.Name.ToString().StartsWith("svc"));
             if (_entities != null && _entities.Count() > 1)
             {
                 int entitiesCount = 0;
