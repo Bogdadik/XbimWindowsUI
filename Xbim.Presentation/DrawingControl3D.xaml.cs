@@ -47,7 +47,7 @@ namespace Xbim.Presentation
     [TemplatePart(Name = TemplateTransparents, Type = typeof (ModelVisual3D))]
     [TemplatePart(Name = TemplateExtras, Type = typeof (ModelVisual3D))]
     [TemplatePart(Name = TemplateGridLines, Type = typeof (GridLinesVisual3D))]
-    public class DrawingControl3D : UserControl
+    public class DrawingControl3D : UserControl, INotifyPropertyChanged
     {
         #region Template defined variables
 
@@ -78,8 +78,47 @@ namespace Xbim.Presentation
         public ObservableMeshVisual3D HighlightedVisual => Highlighted;
 
         #endregion
-        
-        public bool AltProcess { get; set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected void OnPropertyChanged(string name)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        private bool _altProcess;
+        public bool AltProcess
+        {
+            get
+            {
+                return _altProcess;
+            }
+            set
+            {
+                if (value == true)
+                    _clipHandlerProcess = false;
+                _altProcess = value;
+                OnPropertyChanged("AltProcess");
+                OnPropertyChanged("ClipHandlerProcess");
+            }
+        }
+
+        private bool _clipHandlerProcess;
+        public bool ClipHandlerProcess
+        {
+            get
+            {
+                return _clipHandlerProcess;
+            }
+            set
+            {
+                if (value == true)
+                    _altProcess = false;
+                _clipHandlerProcess = value;
+                OnPropertyChanged("AltProcess");
+                OnPropertyChanged("ClipHandlerProcess");
+            }
+        }
 
         #region Setting Properties
 
@@ -247,6 +286,27 @@ namespace Xbim.Presentation
                 SetCutPlane(p.X, p.Y, p.Z, n.X, n.Y, n.Z);
             }
             base.OnPreviewKeyUp(e);
+        }
+
+        public void ChangeClipHandlerPosition(Point3D point, PlaneType planeType)
+        {
+            int nrmX = 0, nrmY = 0, nrmZ = 0;
+            switch (planeType)
+            {
+                case PlaneType.TypeX: nrmX = 1; break;
+                case PlaneType.TypeXInv: nrmX = -1; break;
+                case PlaneType.TypeY: nrmY = 1; break;
+                case PlaneType.TypeYInv: nrmY = -1; break;
+                case PlaneType.TypeZ: nrmZ = 1; break;
+                case PlaneType.TypeZInv: nrmZ = -1; break;
+            }
+            SetCutPlane(point.X, point.Y, point.Z, nrmX, nrmY, nrmZ);
+            var matrix = new Matrix3D();
+            matrix.Rotate(Rotation(planeType));
+            matrix.OffsetX = point.X;
+            matrix.OffsetY = point.Y;
+            matrix.OffsetZ = point.Z;
+            Extras.Transform = new MatrixTransform3D(matrix);
         }
 
         protected void ClipPlaneHandlesHide()
@@ -516,6 +576,39 @@ namespace Xbim.Presentation
 
         public delegate void ViewportMouseMove(Point3D? e);
 
+        public enum PlaneType
+        {
+            TypeX = 0,
+            TypeY,
+            TypeZ,
+            TypeXInv,
+            TypeYInv,
+            TypeZInv
+        }
+
+        public PlaneType CurrentPlaneType { get; set; }
+
+        public Quaternion Rotation(PlaneType planeType)
+        {
+            switch(planeType)
+            {
+                case PlaneType.TypeX:
+                    return new Quaternion(new Vector3D(0, 1, 0), -90);
+                case PlaneType.TypeXInv:
+                    return new Quaternion(new Vector3D(0, 1, 0), 90);
+                case PlaneType.TypeY:
+                    return new Quaternion(new Vector3D(1, 0, 0), 90);
+                case PlaneType.TypeYInv:
+                    return new Quaternion(new Vector3D(1, 0, 0), -90);
+                case PlaneType.TypeZ:
+                    return new Quaternion(new Vector3D(0, 1, 0), 180);
+                case PlaneType.TypeZInv:
+                    return new Quaternion(new Vector3D(0, 1, 0), 0);
+                default:
+                    return new Quaternion();
+            }
+        }
+
         protected virtual void Canvas_MouseDown(object sender, MouseButtonEventArgs e)
         {
             var pos = e.GetPosition(Canvas);
@@ -588,6 +681,13 @@ namespace Xbim.Presentation
                     mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
                 if (AltProcess)
                     mc = XbimMouseClickActions.Measure;
+                if (ClipHandlerProcess)
+                {
+                    var pClosest = GetClosestTriangleHotPoint(hit, pos, SnapRadius);
+                    DisabledCutPlane();
+                    ChangeClipHandlerPosition(pClosest.Point, CurrentPlaneType);
+                    return;
+                }
                 if (mc != XbimMouseClickActions.Measure && !UserModeledDimension.IsEmpty)
                 {
                     // drop the geometry that holds the visualization of the measure
@@ -712,7 +812,7 @@ namespace Xbim.Presentation
                 var mc = XbimMouseClickActions.Single;
                 if (MouseModifierKeyBehaviour.ContainsKey(Keyboard.Modifiers))
                     mc = MouseModifierKeyBehaviour[Keyboard.Modifiers];
-                if (AltProcess)
+                if (AltProcess || ClipHandlerProcess)
                     mc = XbimMouseClickActions.Measure;
                 if (mc.Equals(XbimMouseClickActions.Measure))
                 {
